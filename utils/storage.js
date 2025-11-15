@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDatabase } from './database';
+import { syncManager } from './sync';
 
 const PLAYERS_KEY = '@pingpong_players';
 const MATCHES_KEY = '@pingpong_matches';
@@ -46,10 +47,12 @@ export async function getPlayers() {
  */
 export async function addPlayer(name, rating = 1000) {
   try {
+    let newPlayer;
+    
     // Web fallback
     if (Platform.OS === 'web') {
       const players = await getPlayers();
-      const newPlayer = {
+      newPlayer = {
         id: Date.now(),
         name,
         rating,
@@ -57,29 +60,59 @@ export async function addPlayer(name, rating = 1000) {
         matchesPlayed: 0,
         wins: 0,
         losses: 0,
+        synced: false
       };
       await AsyncStorage.setItem(PLAYERS_KEY, JSON.stringify([...players, newPlayer]));
-      return newPlayer;
+    } else {
+      // Native: Use SQLite
+      const db = getDatabase();
+      if (!db) return null;
+      
+      const result = await db.runAsync(
+        'INSERT INTO players (name, rating, matchesPlayed, synced, lastModified) VALUES (?, ?, 0, 0, ?)',
+        [name, rating, Date.now()]
+      );
+      
+      newPlayer = {
+        id: result.lastInsertRowId,
+        name,
+        rating,
+        elo: rating,
+        matchesPlayed: 0,
+        wins: 0,
+        losses: 0,
+        synced: false
+      };
     }
     
-    // Native: Use SQLite
-    const db = getDatabase();
-    if (!db) return null;
+    // Sync to Firestore (optional - continues even if it fails)
+    if (syncManager && typeof syncManager.syncPlayerToFirestore === 'function') {
+      try {
+        const firestoreId = await syncManager.syncPlayerToFirestore(newPlayer);
+        
+        // Update local record with Firestore ID
+        if (firestoreId) {
+          newPlayer.firestoreId = firestoreId;
+          if (Platform.OS === 'web') {
+            const players = await getPlayers();
+            const updated = players.map(p => p.id === newPlayer.id ? { ...p, firestoreId, synced: true } : p);
+            await AsyncStorage.setItem(PLAYERS_KEY, JSON.stringify(updated));
+          } else {
+            const db = getDatabase();
+            if (db) {
+              await db.runAsync(
+                'UPDATE players SET firestoreId = ?, synced = 1 WHERE id = ?',
+                [firestoreId, newPlayer.id]
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.log('Player saved locally, will sync to Firestore later:', error.message);
+      }
+    }
     
-    const result = await db.runAsync(
-      'INSERT INTO players (name, rating, matchesPlayed) VALUES (?, ?, 0)',
-      [name, rating]
-    );
-    
-    return {
-      id: result.lastInsertRowId,
-      name,
-      rating,
-      elo: rating,
-      matchesPlayed: 0,
-      wins: 0,
-      losses: 0,
-    };
+    return newPlayer;
   } catch (error) {
     console.error('Error adding player:', error);
     return null;
@@ -202,6 +235,9 @@ export async function getMatches() {
  */
 export async function addMatch(matchData) {
   try {
+    let matchId;
+    const timestamp = Date.now();
+    
     // Web fallback
     if (Platform.OS === 'web') {
       const matches = await getMatches();
@@ -211,7 +247,7 @@ export async function addMatch(matchData) {
       const loserPlayer = players.find(p => (p.id === playerA || p.id === playerB) && p.id !== winner);
       
       const newMatch = {
-        id: Date.now().toString(),
+        id: timestamp.toString(),
         winnerId: winner.toString(),
         winnerName: winnerPlayer?.name || '',
         loserId: (winner === playerA ? playerB : playerA).toString(),
@@ -220,24 +256,56 @@ export async function addMatch(matchData) {
         winnerNewElo: winner === playerA ? ratingA_after : ratingB_after,
         loserOldElo: winner === playerA ? ratingB_before : ratingA_before,
         loserNewElo: winner === playerA ? ratingB_after : ratingA_after,
-        timestamp: Date.now(),
+        timestamp,
+        synced: false
       };
       
       await AsyncStorage.setItem(MATCHES_KEY, JSON.stringify([newMatch, ...matches]));
-      return true;
+      matchId = newMatch.id;
+    } else {
+      // Native: Use SQLite
+      const db = getDatabase();
+      if (!db) return false;
+      
+      const { playerA, playerB, winner, ratingA_before, ratingA_after, ratingB_before, ratingB_after } = matchData;
+      
+      const result = await db.runAsync(
+        `INSERT INTO matches (playerA, playerB, winner, date, ratingA_before, ratingA_after, ratingB_before, ratingB_after, synced, lastModified)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+        [playerA, playerB, winner, timestamp, ratingA_before, ratingA_after, ratingB_before, ratingB_after, timestamp]
+      );
+      
+      matchId = result.lastInsertRowId;
     }
     
-    // Native: Use SQLite
-    const db = getDatabase();
-    if (!db) return false;
-    
-    const { playerA, playerB, winner, ratingA_before, ratingA_after, ratingB_before, ratingB_after } = matchData;
-    
-    await db.runAsync(
-      `INSERT INTO matches (playerA, playerB, winner, date, ratingA_before, ratingA_after, ratingB_before, ratingB_after)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [playerA, playerB, winner, Date.now(), ratingA_before, ratingA_after, ratingB_before, ratingB_after]
-    );
+    // Sync to Firestore (optional - continues even if it fails)
+    if (syncManager && typeof syncManager.syncMatchToFirestore === 'function') {
+      try {
+        const firestoreId = await syncManager.syncMatchToFirestore({
+          ...matchData,
+          timestamp
+        });
+        
+        // Update local record with Firestore ID
+        if (firestoreId) {
+          if (Platform.OS === 'web') {
+            const matches = await getMatches();
+            const updated = matches.map(m => m.id === matchId ? { ...m, firestoreId, synced: true } : m);
+            await AsyncStorage.setItem(MATCHES_KEY, JSON.stringify(updated));
+          } else {
+            const db = getDatabase();
+            if (db) {
+              await db.runAsync(
+                'UPDATE matches SET firestoreId = ?, synced = 1 WHERE id = ?',
+                [firestoreId, matchId]
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.log('Match saved locally, will sync to Firestore later:', error.message);
+      }
+    }
     
     return true;
   } catch (error) {

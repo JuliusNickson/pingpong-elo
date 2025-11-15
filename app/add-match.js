@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { usePlayers } from '../hooks/usePlayers';
 import { useMatches } from '../hooks/useMatches';
@@ -83,13 +83,15 @@ export default function AddMatchScreen() {
                 selectedValue={winner}
                 onValueChange={setWinner}
                 style={styles.picker}
+                itemStyle={styles.pickerItem}
               >
-                <Picker.Item label="Select Winner" value="" />
+                <Picker.Item label="Select Winner" value="" color={COLORS.textSecondary} />
                 {players.map(player => (
                   <Picker.Item
                     key={player.id}
                     label={`${player.name} (${player.elo})`}
                     value={player.id}
+                    color={COLORS.text}
                   />
                 ))}
               </Picker>
@@ -103,13 +105,15 @@ export default function AddMatchScreen() {
                 selectedValue={loser}
                 onValueChange={setLoser}
                 style={styles.picker}
+                itemStyle={styles.pickerItem}
               >
-                <Picker.Item label="Select Loser" value="" />
+                <Picker.Item label="Select Loser" value="" color={COLORS.textSecondary} />
                 {players.map(player => (
                   <Picker.Item
                     key={player.id}
                     label={`${player.name} (${player.elo})`}
                     value={player.id}
+                    color={COLORS.text}
                   />
                 ))}
               </Picker>
@@ -154,8 +158,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
+    minHeight: Platform.OS === 'ios' ? 180 : 50,
   },
   picker: {
+    color: COLORS.text,
+    height: Platform.OS === 'ios' ? 180 : 50,
+  },
+  pickerItem: {
+    fontSize: 18,
+    height: Platform.OS === 'ios' ? 180 : 50,
     color: COLORS.text,
   },
   buttonContainer: {

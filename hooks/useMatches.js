@@ -1,12 +1,26 @@
 import { useState, useEffect } from 'react';
 import { getMatches, addMatch as addMatchDb } from '../utils/storage';
+import { syncManager } from '../utils/sync';
 
 export function useMatches() {
   const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState(null);
 
   useEffect(() => {
     loadMatches();
+    
+    // Set up sync listener
+    const unsubscribe = syncManager.addSyncListener((status) => {
+      setSyncStatus(status);
+      if (status.type === 'matches_synced') {
+        loadMatches();
+      }
+    });
+    
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const loadMatches = async () => {
@@ -35,6 +49,7 @@ export function useMatches() {
   return {
     matches,
     loading,
+    syncStatus,
     addMatch,
     clearMatches,
     refreshMatches: loadMatches,

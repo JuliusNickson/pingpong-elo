@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { usePlayers } from '../hooks/usePlayers';
 import PlayerCard from '../components/PlayerCard';
 import Button from '../components/Button';
+import SyncStatus from '../components/SyncStatus';
 import { COLORS } from '../constants/colors';
 
 export default function HomeScreen() {
@@ -15,6 +16,8 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      <SyncStatus />
+      
       <Text style={styles.title}>Ping Pong Leaderboard</Text>
       
       <View style={styles.navigation}>

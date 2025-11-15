@@ -1,11 +1,34 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import Button from '../components/Button';
 import { COLORS } from '../constants/colors';
 import { DEFAULT_ELO, K_FACTOR } from '../constants/defaults';
 import { clearAllData } from '../utils/storage';
+import { syncManager } from '../utils/sync';
+import { isFirebaseConfigured } from '../utils/firebase';
 
 export default function SettingsScreen() {
+  const [syncState, setSyncState] = useState(null);
+
+  useEffect(() => {
+    loadSyncState();
+  }, []);
+
+  const loadSyncState = async () => {
+    const status = await syncManager.getSyncStatus();
+    setSyncState(status);
+  };
+
+  const handleManualSync = async () => {
+    try {
+      await syncManager.triggerSync();
+      Alert.alert('Success', 'Data synced successfully');
+      await loadSyncState();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to sync data');
+    }
+  };
+
   const handleResetData = () => {
     Alert.alert(
       'Reset All Data',
@@ -46,6 +69,52 @@ export default function SettingsScreen() {
           The K-factor determines how much ELO points change after each match.
           Higher K-factor means bigger rating changes.
         </Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Firebase Sync</Text>
+        {isFirebaseConfigured() ? (
+          <>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Status:</Text>
+              <Text style={[styles.infoValue, { color: COLORS.success }]}>✓ Configured</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Pending Items:</Text>
+              <Text style={styles.infoValue}>{syncState?.pendingCount || 0}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Last Sync:</Text>
+              <Text style={styles.infoValue}>
+                {syncState?.lastSync 
+                  ? new Date(syncState.lastSync).toLocaleString() 
+                  : 'Never'}
+              </Text>
+            </View>
+            <Button
+              title="Sync Now"
+              onPress={handleManualSync}
+              variant="secondary"
+            />
+            <Text style={styles.description}>
+              Real-time sync with Firestore. Data automatically syncs across all devices.
+            </Text>
+          </>
+        ) : (
+          <>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Status:</Text>
+              <Text style={[styles.infoValue, { color: COLORS.warning }]}>⚠ Not Configured</Text>
+            </View>
+            <Text style={styles.description}>
+              To enable cloud sync:
+              {'\n'}1. Edit utils/firebase.js
+              {'\n'}2. Add your Firebase config
+              {'\n'}3. Restart the app
+              {'\n\n'}Without Firebase, data is stored locally only.
+            </Text>
+          </>
+        )}
       </View>
 
       <View style={styles.section}>

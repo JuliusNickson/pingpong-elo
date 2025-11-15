@@ -18,17 +18,42 @@ export async function initDatabase() {
   try {
     db = await SQLite.openDatabaseAsync('pingpong.db');
     
-    // Create players table
+    // Create players table with Firestore sync fields
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS players (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
         rating INTEGER NOT NULL DEFAULT 1000,
-        matchesPlayed INTEGER NOT NULL DEFAULT 0
+        matchesPlayed INTEGER NOT NULL DEFAULT 0,
+        firestoreId TEXT UNIQUE,
+        synced INTEGER DEFAULT 0,
+        lastModified INTEGER DEFAULT 0
       );
     `);
     
-    // Create matches table
+    // Migrate existing players table - add new columns if they don't exist
+    try {
+      await db.execAsync(`ALTER TABLE players ADD COLUMN firestoreId TEXT;`);
+      console.log('Added firestoreId column to players');
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    
+    try {
+      await db.execAsync(`ALTER TABLE players ADD COLUMN synced INTEGER DEFAULT 0;`);
+      console.log('Added synced column to players');
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    
+    try {
+      await db.execAsync(`ALTER TABLE players ADD COLUMN lastModified INTEGER DEFAULT 0;`);
+      console.log('Added lastModified column to players');
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    
+    // Create matches table with Firestore sync fields
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS matches (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,11 +65,36 @@ export async function initDatabase() {
         ratingA_after INTEGER NOT NULL,
         ratingB_before INTEGER NOT NULL,
         ratingB_after INTEGER NOT NULL,
+        firestoreId TEXT UNIQUE,
+        synced INTEGER DEFAULT 0,
+        lastModified INTEGER DEFAULT 0,
         FOREIGN KEY (playerA) REFERENCES players(id),
         FOREIGN KEY (playerB) REFERENCES players(id),
         FOREIGN KEY (winner) REFERENCES players(id)
       );
     `);
+    
+    // Migrate existing matches table - add new columns if they don't exist
+    try {
+      await db.execAsync(`ALTER TABLE matches ADD COLUMN firestoreId TEXT;`);
+      console.log('Added firestoreId column to matches');
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    
+    try {
+      await db.execAsync(`ALTER TABLE matches ADD COLUMN synced INTEGER DEFAULT 0;`);
+      console.log('Added synced column to matches');
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    
+    try {
+      await db.execAsync(`ALTER TABLE matches ADD COLUMN lastModified INTEGER DEFAULT 0;`);
+      console.log('Added lastModified column to matches');
+    } catch (e) {
+      // Column already exists, ignore
+    }
     
     console.log('Database initialized successfully');
     return db;
