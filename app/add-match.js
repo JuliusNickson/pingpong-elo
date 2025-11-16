@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -7,11 +7,12 @@ import {
   ScrollView, 
   TextInput,
   TouchableOpacity,
-  ActivityIndicator 
+  ActivityIndicator,
+  FlatList 
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
-import { searchUsers } from '../utils/userProfile';
+import { getLeaderboard } from '../utils/userProfile';
 import { createMatchRequest } from '../utils/matchRequests';
 import Button from '../components/Button';
 import { COLORS } from '../constants/colors';
@@ -22,33 +23,46 @@ export default function AddMatchScreen() {
   const router = useRouter();
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [allPlayers, setAllPlayers] = useState([]);
+  const [filteredPlayers, setFilteredPlayers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) {
-      Alert.alert('Error', 'Please enter an email to search');
-      return;
-    }
+  // Load all players on mount
+  useEffect(() => {
+    loadPlayers();
+  }, [user.uid]);
 
-    setIsSearching(true);
+  const loadPlayers = async () => {
+    setIsLoading(true);
     try {
-      const results = await searchUsers(searchQuery.trim());
+      // Get all players from leaderboard (up to 500)
+      const players = await getLeaderboard(500);
       // Filter out current user
-      const filteredResults = results.filter(u => u.uid !== user.uid);
-      setSearchResults(filteredResults);
-      
-      if (filteredResults.length === 0) {
-        Alert.alert('No Results', 'No users found with that email');
-      }
+      const otherPlayers = players.filter(p => p.uid !== user.uid);
+      setAllPlayers(otherPlayers);
+      setFilteredPlayers(otherPlayers);
     } catch (error) {
-      console.error('Error searching users:', error);
-      Alert.alert('Error', 'Failed to search for users');
+      console.error('Error loading players:', error);
+      Alert.alert('Error', 'Failed to load players');
     } finally {
-      setIsSearching(false);
+      setIsLoading(false);
     }
   };
+
+  // Filter players based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredPlayers(allPlayers);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = allPlayers.filter(player => 
+        player.displayName.toLowerCase().includes(query) ||
+        player.email.toLowerCase().includes(query)
+      );
+      setFilteredPlayers(filtered);
+    }
+  }, [searchQuery, allPlayers]);
 
   const handleSendRequest = async (opponent) => {
     Alert.alert(
@@ -82,7 +96,6 @@ export default function AddMatchScreen() {
                     text: 'OK',
                     onPress: () => {
                       setSearchQuery('');
-                      setSearchResults([]);
                       router.push('/');
                     }
                   }
@@ -100,72 +113,87 @@ export default function AddMatchScreen() {
     );
   };
 
+  const renderPlayer = ({ item: opponent }) => (
+    <View style={styles.playerCard}>
+      <View style={styles.playerInfo}>
+        <Text style={styles.playerName}>{opponent.displayName}</Text>
+        <Text style={styles.playerEmail}>{opponent.email}</Text>
+        <Text style={styles.playerRating}>Rating: {Math.round(opponent.rating)}</Text>
+        <Text style={styles.playerStats}>
+          {opponent.matchesPlayed || 0} matches • {opponent.wins || 0}W - {opponent.losses || 0}L
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.sendButton, isSending && styles.sendButtonDisabled]}
+        onPress={() => handleSendRequest(opponent)}
+        disabled={isSending}
+      >
+        <Text style={styles.sendButtonText}>
+          {isSending ? 'Sending...' : 'I Won'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading players...</Text>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Request Match</Text>
-      <Text style={styles.subtitle}>
-        Search for your opponent and send a match request
-      </Text>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Challenge Player</Text>
+        <Text style={styles.subtitle}>
+          Select your opponent and claim your victory
+        </Text>
+      </View>
 
       <View style={styles.searchSection}>
-        <Text style={styles.label}>Opponent's Email</Text>
         <TextInput
-          style={styles.input}
-          placeholder="Enter email address"
+          style={styles.searchInput}
+          placeholder="Search by name or email..."
           placeholderTextColor={COLORS.textSecondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
           autoCapitalize="none"
-          keyboardType="email-address"
           autoCorrect={false}
-        />
-        <Button 
-          title={isSearching ? "Searching..." : "Search"}
-          onPress={handleSearch}
-          disabled={isSearching || !searchQuery.trim()}
         />
       </View>
 
-      {isSearching && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+      {filteredPlayers.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>
+            {searchQuery ? 'No players found' : 'No other players registered yet'}
+          </Text>
+          <Text style={styles.emptySubtext}>
+            {searchQuery ? 'Try a different search term' : 'Invite friends to join!'}
+          </Text>
         </View>
-      )}
-
-      {searchResults.length > 0 && (
-        <View style={styles.resultsSection}>
-          <Text style={styles.resultsTitle}>Search Results</Text>
-          {searchResults.map((opponent) => (
-            <View key={opponent.uid} style={styles.resultCard}>
-              <View style={styles.resultInfo}>
-                <Text style={styles.resultName}>{opponent.displayName}</Text>
-                <Text style={styles.resultEmail}>{opponent.email}</Text>
-                <Text style={styles.resultRating}>Rating: {Math.round(opponent.rating)}</Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.sendButton, isSending && styles.sendButtonDisabled]}
-                onPress={() => handleSendRequest(opponent)}
-                disabled={isSending}
-              >
-                <Text style={styles.sendButtonText}>
-                  {isSending ? 'Sending...' : 'I Won'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
+      ) : (
+        <FlatList
+          data={filteredPlayers}
+          renderItem={renderPlayer}
+          keyExtractor={(item) => item.uid}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        />
       )}
 
       <View style={styles.infoSection}>
         <Text style={styles.infoTitle}>How it works:</Text>
         <Text style={styles.infoText}>
-          1. Search for your opponent by their email{'\n'}
+          1. Find your opponent in the list{'\n'}
           2. Click "I Won" to send them a match request{'\n'}
           3. They must confirm the loss{'\n'}
           4. Once confirmed, both ratings will be updated
         </Text>
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -173,30 +201,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  header: {
+    paddingHorizontal: 16,
     paddingTop: 20,
+    paddingBottom: 16,
   },
   title: {
     ...FONTS.title,
     textAlign: 'center',
     marginBottom: 8,
-    paddingHorizontal: 16,
   },
   subtitle: {
     ...FONTS.body,
     color: COLORS.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 16,
   },
   searchSection: {
     paddingHorizontal: 16,
-    marginBottom: 24,
+    marginBottom: 16,
   },
-  label: {
-    ...FONTS.subheading,
-    marginBottom: 8,
-  },
-  input: {
+  searchInput: {
     backgroundColor: COLORS.surface,
     borderRadius: 8,
     borderWidth: 1,
@@ -204,46 +229,57 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: COLORS.text,
-    marginBottom: 12,
   },
   loadingContainer: {
-    padding: 40,
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    padding: 40,
   },
-  resultsSection: {
+  loadingText: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    marginTop: 12,
+  },
+  listContent: {
     paddingHorizontal: 16,
-    marginBottom: 24,
   },
-  resultsTitle: {
-    ...FONTS.subheading,
-    marginBottom: 12,
+  separator: {
+    height: 12,
   },
-  resultCard: {
+  playerCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 8,
     padding: 16,
-    marginBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  resultInfo: {
+  playerInfo: {
     flex: 1,
   },
-  resultName: {
+  playerName: {
     ...FONTS.subheading,
     marginBottom: 4,
   },
-  resultEmail: {
+  playerEmail: {
     ...FONTS.body,
     color: COLORS.textSecondary,
+    fontSize: 14,
     marginBottom: 4,
   },
-  resultRating: {
+  playerRating: {
     ...FONTS.body,
     color: COLORS.primary,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  playerStats: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    fontSize: 12,
   },
   sendButton: {
     backgroundColor: COLORS.primary,
@@ -260,10 +296,26 @@ const styles = StyleSheet.create({
     color: COLORS.background,
     fontWeight: 'bold',
   },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    ...FONTS.subheading,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
   infoSection: {
     paddingHorizontal: 16,
-    marginTop: 24,
-    marginBottom: 40,
+    marginTop: 16,
+    marginBottom: 20,
     padding: 16,
     backgroundColor: COLORS.surface,
     borderRadius: 8,
