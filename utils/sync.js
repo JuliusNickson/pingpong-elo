@@ -40,16 +40,17 @@ class SyncManager {
     }
 
     try {
-      // Start real-time listeners for both collections
-      this.startPlayersListener();
-      this.startMatchesListener();
+      // TODO: Update listeners for new user-based model
+      // Temporarily disabled old multi-player sync system
+      // this.startPlayersListener();
+      // this.startMatchesListener();
       
       // Process any pending sync queue
       await this.processSyncQueue();
       
-      console.log('Sync manager initialized');
+      console.log('Sync manager initialized (user-based mode)');
     } catch (error) {
-      console.error('Error initializing sync:', error);
+      console.error('Error initializing sync manager:', error);
     }
   }
 

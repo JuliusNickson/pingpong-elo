@@ -1,5 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 /**
@@ -26,12 +28,29 @@ const firebaseConfig = {
 // Initialize Firebase
 let app;
 let db;
+let auth;
 
 export function initFirebase() {
   try {
     if (!app) {
       app = initializeApp(firebaseConfig);
       db = getFirestore(app);
+      
+      // Initialize Auth with persistence
+      try {
+        if (Platform.OS === 'web') {
+          auth = getAuth(app);
+        } else {
+          // For React Native, use AsyncStorage for auth persistence
+          auth = initializeAuth(app, {
+            persistence: getReactNativePersistence(AsyncStorage)
+          });
+        }
+      } catch (authError) {
+        console.error('Auth initialization error:', authError);
+        // Fallback: try getAuth for React Native too
+        auth = getAuth(app);
+      }
       
       // Enable offline persistence for web
       if (Platform.OS === 'web') {
@@ -60,6 +79,13 @@ export function getFirestoreDb() {
   return db;
 }
 
+export function getFirebaseAuth() {
+  if (!auth) {
+    initFirebase();
+  }
+  return auth;
+}
+
 export function isFirebaseConfigured() {
   return firebaseConfig.apiKey !== "YOUR_API_KEY";
 }
@@ -72,20 +98,39 @@ export function isFirebaseConfigured() {
  * rules_version = '2';
  * service cloud.firestore {
  *   match /databases/{database}/documents {
- *     // Players collection - anyone can read, only authenticated can write
- *     match /players/{playerId} {
- *       allow read: if true;
- *       allow write: if request.auth != null || true; // Set to true for no-auth development
+ *     // Users can read all profiles (for leaderboard/search)
+ *     // Users can only write their own profile
+ *     match /users/{uid} {
+ *       allow read: if request.auth != null;
+ *       allow create, update: if request.auth != null && request.auth.uid == uid;
+ *       allow delete: if false;
  *     }
  *     
- *     // Matches collection - anyone can read, only authenticated can write
+ *     // Match requests: sender can create/cancel, opponent can accept/decline
+ *     match /matchRequests/{requestId} {
+ *       allow read: if request.auth != null && (
+ *         request.auth.uid == resource.data.senderUid ||
+ *         request.auth.uid == resource.data.opponentUid
+ *       );
+ *       allow create: if request.auth != null && 
+ *         request.auth.uid == request.resource.data.senderUid;
+ *       allow update: if request.auth != null && (
+ *         (request.auth.uid == resource.data.senderUid && 
+ *          request.resource.data.status == 'cancelled') ||
+ *         (request.auth.uid == resource.data.opponentUid && 
+ *          (request.resource.data.status == 'accepted' || 
+ *           request.resource.data.status == 'declined'))
+ *       );
+ *       allow delete: if false;
+ *     }
+ *     
+ *     // Matches can be read by authenticated users
+ *     // Can only be created (not edited) by authenticated users
  *     match /matches/{matchId} {
- *       allow read: if true;
- *       allow write: if request.auth != null || true; // Set to true for no-auth development
+ *       allow read: if request.auth != null;
+ *       allow create: if request.auth != null;
+ *       allow update, delete: if false;  // Nobody can edit old matches
  *     }
  *   }
  * }
- * 
- * NOTE: For production, implement proper authentication!
- * The rules above are permissive for development purposes.
  */

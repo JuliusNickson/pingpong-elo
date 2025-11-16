@@ -1,139 +1,170 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
-import { usePlayers } from '../hooks/usePlayers';
-import { useMatches } from '../hooks/useMatches';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Alert, 
+  ScrollView, 
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator 
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { useAuth } from '../contexts/AuthContext';
+import { searchUsers } from '../utils/userProfile';
+import { createMatchRequest } from '../utils/matchRequests';
 import Button from '../components/Button';
 import { COLORS } from '../constants/colors';
-import { calculateNewElo } from '../utils/elo';
+import { FONTS } from '../constants/fonts';
 
 export default function AddMatchScreen() {
-  const { players, updatePlayerElo } = usePlayers();
-  const { addMatch } = useMatches();
+  const { user } = useAuth();
+  const router = useRouter();
   
-  const [winner, setWinner] = useState('');
-  const [loser, setLoser] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
-  const handleAddMatch = () => {
-    if (!winner || !loser) {
-      Alert.alert('Error', 'Please select both winner and loser');
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      Alert.alert('Error', 'Please enter an email to search');
       return;
     }
 
-    if (winner === loser) {
-      Alert.alert('Error', 'Winner and loser must be different players');
-      return;
+    setIsSearching(true);
+    try {
+      const results = await searchUsers(searchQuery.trim());
+      // Filter out current user
+      const filteredResults = results.filter(u => u.uid !== user.uid);
+      setSearchResults(filteredResults);
+      
+      if (filteredResults.length === 0) {
+        Alert.alert('No Results', 'No users found with that email');
+      }
+    } catch (error) {
+      console.error('Error searching users:', error);
+      Alert.alert('Error', 'Failed to search for users');
+    } finally {
+      setIsSearching(false);
     }
+  };
 
-    const winnerPlayer = players.find(p => p.id === winner);
-    const loserPlayer = players.find(p => p.id === loser);
-
-    if (!winnerPlayer || !loserPlayer) {
-      Alert.alert('Error', 'Selected players not found');
-      return;
-    }
-
-    // Calculate new ELO ratings with dynamic K-factor based on RD
-    const { 
-      winnerNewElo, 
-      loserNewElo, 
-      winnerNewRd, 
-      loserNewRd,
-      winnerK,
-      loserK,
-    } = calculateNewElo(
-      winnerPlayer.elo,
-      loserPlayer.elo,
-      winnerPlayer.rd || 300,
-      loserPlayer.rd || 300
-    );
-
-    // Update player ELOs, RD, and win/loss records
-    updatePlayerElo(winner, winnerNewElo, winnerNewRd, true);
-    updatePlayerElo(loser, loserNewElo, loserNewRd, false);
-
-    // Add match to history with database schema
-    addMatch({
-      playerA: winner,
-      playerB: loser,
-      winner: winner,
-      ratingA_before: winnerPlayer.elo,
-      ratingA_after: winnerNewElo,
-      ratingB_before: loserPlayer.elo,
-      ratingB_after: loserNewElo,
-    });
-
-    // Reset form
-    setWinner('');
-    setLoser('');
-
+  const handleSendRequest = async (opponent) => {
     Alert.alert(
-      'Match Recorded!',
-      `${winnerPlayer.name} defeated ${loserPlayer.name}\n\n` +
-      `${winnerPlayer.name}: ${winnerPlayer.elo} → ${winnerNewElo}\n` +
-      `${loserPlayer.name}: ${loserPlayer.elo} → ${loserNewElo}`
+      'Confirm Match Request',
+      `Send match request to ${opponent.displayName}?\n\nYou are claiming you WON against them.\nThey must confirm the loss.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Send Request',
+          onPress: async () => {
+            setIsSending(true);
+            try {
+              // Get current user's display name from local profile or auth
+              const currentUserName = user.displayName || user.email;
+              
+              await createMatchRequest(
+                user.uid,
+                opponent.uid,
+                currentUserName,
+                opponent.displayName
+              );
+              
+              Alert.alert(
+                'Request Sent!',
+                `Match request sent to ${opponent.displayName}. They will need to confirm the loss for the match to be recorded.`,
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      setSearchQuery('');
+                      setSearchResults([]);
+                      router.push('/');
+                    }
+                  }
+                ]
+              );
+            } catch (error) {
+              console.error('Error sending match request:', error);
+              Alert.alert('Error', 'Failed to send match request');
+            } finally {
+              setIsSending(false);
+            }
+          }
+        }
+      ]
     );
   };
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Add Match Result</Text>
+      <Text style={styles.title}>Request Match</Text>
+      <Text style={styles.subtitle}>
+        Search for your opponent and send a match request
+      </Text>
 
-      {players.length < 2 ? (
-        <Text style={styles.emptyText}>
-          You need at least 2 players to record a match. Please add players first.
-        </Text>
-      ) : (
-        <>
-          <View style={styles.section}>
-            <Text style={styles.label}>Winner</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={winner}
-                onValueChange={setWinner}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
-                <Picker.Item label="Select Winner" value="" color={COLORS.textSecondary} />
-                {players.map(player => (
-                  <Picker.Item
-                    key={player.id}
-                    label={`${player.name} (${player.elo})`}
-                    value={player.id}
-                    color={COLORS.text}
-                  />
-                ))}
-              </Picker>
-            </View>
-          </View>
+      <View style={styles.searchSection}>
+        <Text style={styles.label}>Opponent's Email</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter email address"
+          placeholderTextColor={COLORS.textSecondary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          autoCorrect={false}
+        />
+        <Button 
+          title={isSearching ? "Searching..." : "Search"}
+          onPress={handleSearch}
+          disabled={isSearching || !searchQuery.trim()}
+        />
+      </View>
 
-          <View style={styles.section}>
-            <Text style={styles.label}>Loser</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={loser}
-                onValueChange={setLoser}
-                style={styles.picker}
-                itemStyle={styles.pickerItem}
-              >
-                <Picker.Item label="Select Loser" value="" color={COLORS.textSecondary} />
-                {players.map(player => (
-                  <Picker.Item
-                    key={player.id}
-                    label={`${player.name} (${player.elo})`}
-                    value={player.id}
-                    color={COLORS.text}
-                  />
-                ))}
-              </Picker>
-            </View>
-          </View>
-
-          <View style={styles.buttonContainer}>
-            <Button title="Record Match" onPress={handleAddMatch} />
-          </View>
-        </>
+      {isSearching && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
       )}
+
+      {searchResults.length > 0 && (
+        <View style={styles.resultsSection}>
+          <Text style={styles.resultsTitle}>Search Results</Text>
+          {searchResults.map((opponent) => (
+            <View key={opponent.uid} style={styles.resultCard}>
+              <View style={styles.resultInfo}>
+                <Text style={styles.resultName}>{opponent.displayName}</Text>
+                <Text style={styles.resultEmail}>{opponent.email}</Text>
+                <Text style={styles.resultRating}>Rating: {Math.round(opponent.rating)}</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.sendButton, isSending && styles.sendButtonDisabled]}
+                onPress={() => handleSendRequest(opponent)}
+                disabled={isSending}
+              >
+                <Text style={styles.sendButtonText}>
+                  {isSending ? 'Sending...' : 'I Won'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <View style={styles.infoSection}>
+        <Text style={styles.infoTitle}>How it works:</Text>
+        <Text style={styles.infoText}>
+          1. Search for your opponent by their email{'\n'}
+          2. Click "I Won" to send them a match request{'\n'}
+          3. They must confirm the loss{'\n'}
+          4. Once confirmed, both ratings will be updated
+        </Text>
+      </View>
     </ScrollView>
   );
 }
@@ -145,48 +176,108 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.text,
+    ...FONTS.title,
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 8,
+    paddingHorizontal: 16,
   },
-  section: {
+  subtitle: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 16,
+  },
+  searchSection: {
     paddingHorizontal: 16,
     marginBottom: 24,
   },
   label: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
+    ...FONTS.subheading,
     marginBottom: 8,
   },
-  pickerContainer: {
+  input: {
     backgroundColor: COLORS.surface,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
-    overflow: 'hidden',
-    minHeight: Platform.OS === 'ios' ? 180 : 50,
-  },
-  picker: {
-    color: COLORS.text,
-    height: Platform.OS === 'ios' ? 180 : 50,
-  },
-  pickerItem: {
-    fontSize: 18,
-    height: Platform.OS === 'ios' ? 180 : 50,
-    color: COLORS.text,
-  },
-  buttonContainer: {
-    paddingHorizontal: 16,
-    marginTop: 20,
-  },
-  emptyText: {
+    padding: 12,
     fontSize: 16,
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  resultsSection: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  resultsTitle: {
+    ...FONTS.subheading,
+    marginBottom: 12,
+  },
+  resultCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  resultInfo: {
+    flex: 1,
+  },
+  resultName: {
+    ...FONTS.subheading,
+    marginBottom: 4,
+  },
+  resultEmail: {
+    ...FONTS.body,
     color: COLORS.textSecondary,
-    textAlign: 'center',
-    marginTop: 40,
-    paddingHorizontal: 40,
+    marginBottom: 4,
+  },
+  resultRating: {
+    ...FONTS.body,
+    color: COLORS.primary,
+  },
+  sendButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+  },
+  sendButtonText: {
+    ...FONTS.body,
+    color: COLORS.background,
+    fontWeight: 'bold',
+  },
+  infoSection: {
+    paddingHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 40,
+    padding: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    marginHorizontal: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  infoTitle: {
+    ...FONTS.subheading,
+    marginBottom: 8,
+  },
+  infoText: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    lineHeight: 22,
   },
 });
