@@ -1,15 +1,28 @@
 import { Stack } from 'expo-router';
+import { View, ActivityIndicator } from 'react-native';
+import { useAppFonts } from '../hooks/useAppFonts';
+import { COLORS } from '../constants/colors';
 
 export default function RootLayout() {
+  const fontsLoaded = useAppFonts();
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
   return (
     <Stack
       screenOptions={{
         headerStyle: {
-          backgroundColor: '#2563EB',
+          backgroundColor: COLORS.background,
         },
-        headerTintColor: '#fff',
+        headerTintColor: COLORS.text,
         headerTitleStyle: {
-          fontWeight: 'bold',
+          fontFamily: 'Inter_700Bold',
         },
       }}
     >
