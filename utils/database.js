@@ -25,6 +25,8 @@ export async function initDatabase() {
         name TEXT NOT NULL UNIQUE,
         rating INTEGER NOT NULL DEFAULT 1000,
         matchesPlayed INTEGER NOT NULL DEFAULT 0,
+        wins INTEGER NOT NULL DEFAULT 0,
+        losses INTEGER NOT NULL DEFAULT 0,
         firestoreId TEXT UNIQUE,
         synced INTEGER DEFAULT 0,
         lastModified INTEGER DEFAULT 0
@@ -32,25 +34,33 @@ export async function initDatabase() {
     `);
     
     // Migrate existing players table - add new columns if they don't exist
-    try {
+    // Use a safer approach by checking the table schema first
+    const tableInfo = await db.getAllAsync('PRAGMA table_info(players)');
+    const columnNames = tableInfo.map(col => col.name);
+    
+    if (!columnNames.includes('firestoreId')) {
       await db.execAsync(`ALTER TABLE players ADD COLUMN firestoreId TEXT;`);
       console.log('Added firestoreId column to players');
-    } catch (e) {
-      // Column already exists, ignore
     }
     
-    try {
+    if (!columnNames.includes('synced')) {
       await db.execAsync(`ALTER TABLE players ADD COLUMN synced INTEGER DEFAULT 0;`);
       console.log('Added synced column to players');
-    } catch (e) {
-      // Column already exists, ignore
     }
     
-    try {
+    if (!columnNames.includes('lastModified')) {
       await db.execAsync(`ALTER TABLE players ADD COLUMN lastModified INTEGER DEFAULT 0;`);
       console.log('Added lastModified column to players');
-    } catch (e) {
-      // Column already exists, ignore
+    }
+    
+    if (!columnNames.includes('wins')) {
+      await db.execAsync(`ALTER TABLE players ADD COLUMN wins INTEGER DEFAULT 0;`);
+      console.log('Added wins column to players');
+    }
+    
+    if (!columnNames.includes('losses')) {
+      await db.execAsync(`ALTER TABLE players ADD COLUMN losses INTEGER DEFAULT 0;`);
+      console.log('Added losses column to players');
     }
     
     // Create matches table with Firestore sync fields
@@ -75,25 +85,22 @@ export async function initDatabase() {
     `);
     
     // Migrate existing matches table - add new columns if they don't exist
-    try {
+    const matchesTableInfo = await db.getAllAsync('PRAGMA table_info(matches)');
+    const matchesColumns = matchesTableInfo.map(col => col.name);
+    
+    if (!matchesColumns.includes('firestoreId')) {
       await db.execAsync(`ALTER TABLE matches ADD COLUMN firestoreId TEXT;`);
       console.log('Added firestoreId column to matches');
-    } catch (e) {
-      // Column already exists, ignore
     }
     
-    try {
+    if (!matchesColumns.includes('synced')) {
       await db.execAsync(`ALTER TABLE matches ADD COLUMN synced INTEGER DEFAULT 0;`);
       console.log('Added synced column to matches');
-    } catch (e) {
-      // Column already exists, ignore
     }
     
-    try {
+    if (!matchesColumns.includes('lastModified')) {
       await db.execAsync(`ALTER TABLE matches ADD COLUMN lastModified INTEGER DEFAULT 0;`);
       console.log('Added lastModified column to matches');
-    } catch (e) {
-      // Column already exists, ignore
     }
     
     console.log('Database initialized successfully');
@@ -112,7 +119,8 @@ export function getDatabase() {
     return null;
   }
   if (!db) {
-    throw new Error('Database not initialized. Call initDatabase() first.');
+    console.warn('Database not initialized yet. Call initDatabase() first.');
+    return null;
   }
   return db;
 }

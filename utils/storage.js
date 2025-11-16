@@ -29,8 +29,8 @@ export async function getPlayers() {
     const result = await db.getAllAsync('SELECT * FROM players ORDER BY rating DESC');
     return result.map(player => ({
       ...player,
-      wins: 0, // Will be calculated from matches
-      losses: 0, // Will be calculated from matches
+      wins: player.wins || 0,
+      losses: player.losses || 0,
       elo: player.rating, // Map rating to elo for compatibility
     }));
   } catch (error) {
@@ -276,6 +276,86 @@ export async function addMatch(matchData) {
       );
       
       matchId = result.lastInsertRowId;
+
+      // Update both players' ratings, match counts, and win/loss records in database
+      
+      // Update winner: increment wins
+      await db.runAsync(
+        'UPDATE players SET rating = ?, matchesPlayed = matchesPlayed + 1, wins = wins + 1, lastModified = ? WHERE id = ?',
+        [winner === playerA ? ratingA_after : ratingB_after, timestamp, winner]
+      );
+      
+      // Update loser: increment losses
+      const loser = winner === playerA ? playerB : playerA;
+      const loserRating = loser === playerA ? ratingA_after : ratingB_after;
+      await db.runAsync(
+        'UPDATE players SET rating = ?, matchesPlayed = matchesPlayed + 1, losses = losses + 1, lastModified = ? WHERE id = ?',
+        [loserRating, timestamp, loser]
+      );
+    }
+    
+    // Update player stats on web
+    if (Platform.OS === 'web') {
+      const playersJson = await AsyncStorage.getItem(PLAYERS_KEY);
+      const players = playersJson ? JSON.parse(playersJson) : [];
+      
+      const updatedPlayers = players.map(p => {
+        if (p.id === playerA) {
+          const isWinner = winner === playerA;
+          return { 
+            ...p, 
+            rating: ratingA_after, 
+            elo: ratingA_after, 
+            matchesPlayed: (p.matchesPlayed || 0) + 1,
+            wins: (p.wins || 0) + (isWinner ? 1 : 0),
+            losses: (p.losses || 0) + (isWinner ? 0 : 1)
+          };
+        }
+        if (p.id === playerB) {
+          const isWinner = winner === playerB;
+          return { 
+            ...p, 
+            rating: ratingB_after, 
+            elo: ratingB_after, 
+            matchesPlayed: (p.matchesPlayed || 0) + 1,
+            wins: (p.wins || 0) + (isWinner ? 1 : 0),
+            losses: (p.losses || 0) + (isWinner ? 0 : 1)
+          };
+        }
+        return p;
+      });
+      
+      await AsyncStorage.setItem(PLAYERS_KEY, JSON.stringify(updatedPlayers));
+    }
+    
+    // Sync players to Firestore (their ratings changed)
+    if (syncManager && typeof syncManager.syncPlayerToFirestore === 'function') {
+      const { playerA, playerB, ratingA_after, ratingB_after } = matchData;
+      
+      try {
+        // Get updated player data
+        const players = await getPlayers();
+        const playerAData = players.find(p => p.id === playerA);
+        const playerBData = players.find(p => p.id === playerB);
+        
+        if (playerAData) {
+          await syncManager.syncPlayerToFirestore({
+            ...playerAData,
+            rating: ratingA_after,
+            matchesPlayed: (playerAData.matchesPlayed || 0) + 1
+          });
+        }
+        
+        if (playerBData) {
+          await syncManager.syncPlayerToFirestore({
+            ...playerBData,
+            rating: ratingB_after,
+            matchesPlayed: (playerBData.matchesPlayed || 0) + 1
+          });
+        }
+      } catch (error) {
+        console.log('Player updates will sync later:', error.message);
+      }
     }
     
     // Sync to Firestore (optional - continues even if it fails)

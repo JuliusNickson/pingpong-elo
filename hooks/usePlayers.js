@@ -41,20 +41,8 @@ export function usePlayers() {
   const loadPlayers = async () => {
     try {
       const storedPlayers = await getPlayers();
-      
-      // Fetch wins/losses for each player
-      const playersWithStats = await Promise.all(
-        storedPlayers.map(async (player) => {
-          const stats = await getPlayerStats(player.id);
-          return {
-            ...player,
-            wins: stats.wins,
-            losses: stats.losses,
-          };
-        })
-      );
-      
-      setPlayers(playersWithStats);
+      // Players already have wins/losses from database
+      setPlayers(storedPlayers);
     } catch (error) {
       console.error('Error loading players:', error);
     } finally {

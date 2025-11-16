@@ -14,12 +14,13 @@ import { Platform } from 'react-native';
  * 6. Set up security rules (see bottom of file)
  */
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAzrDs2naYANQ3R_HEeZbOvbLOPe2Wp4c0",
+  authDomain: "pingpong-elo-27d40.firebaseapp.com",
+  projectId: "pingpong-elo-27d40",
+  storageBucket: "pingpong-elo-27d40.firebasestorage.app",
+  messagingSenderId: "856486676652",
+  appId: "1:856486676652:web:57b097fd0a216f66e0f709",
+  measurementId: "G-ECRMVEZ757"
 };
 
 // Initialize Firebase

@@ -141,6 +141,12 @@ class SyncManager {
    */
   async updateLocalPlayer(playerData) {
     try {
+      // Validate playerData
+      if (!playerData || !playerData.id) {
+        console.warn('Invalid player data received from Firestore');
+        return;
+      }
+
       if (Platform.OS === 'web') {
         // Web: Use AsyncStorage
         const playersJson = await AsyncStorage.getItem('@pingpong_players');
@@ -153,6 +159,8 @@ class SyncManager {
           rating: playerData.rating,
           elo: playerData.rating,
           matchesPlayed: playerData.matchesPlayed || 0,
+          wins: playerData.wins || 0,
+          losses: playerData.losses || 0,
           firestoreId: playerData.id,
           synced: true
         };
@@ -167,7 +175,10 @@ class SyncManager {
       } else {
         // Native: Use SQLite
         const db = getDatabase();
-        if (!db) return;
+        if (!db) {
+          console.warn('Database not available for player sync');
+          return;
+        }
 
         // Check if player exists
         const existing = await db.getFirstAsync(
@@ -177,20 +188,38 @@ class SyncManager {
 
         if (existing) {
           await db.runAsync(
-            `UPDATE players SET name = ?, rating = ?, matchesPlayed = ?, synced = 1 
+            `UPDATE players SET name = ?, rating = ?, matchesPlayed = ?, wins = ?, losses = ?, synced = 1 
              WHERE firestoreId = ?`,
-            [playerData.name, playerData.rating, playerData.matchesPlayed || 0, playerData.id]
+            [playerData.name, playerData.rating, playerData.matchesPlayed || 0, 
+             playerData.wins || 0, playerData.losses || 0, playerData.id]
           );
         } else {
-          await db.runAsync(
-            `INSERT INTO players (name, rating, matchesPlayed, firestoreId, synced) 
-             VALUES (?, ?, ?, ?, 1)`,
-            [playerData.name, playerData.rating, playerData.matchesPlayed || 0, playerData.id]
-          );
+          try {
+            await db.runAsync(
+              `INSERT INTO players (name, rating, matchesPlayed, wins, losses, firestoreId, synced) 
+               VALUES (?, ?, ?, ?, ?, ?, 1)`,
+              [playerData.name, playerData.rating, playerData.matchesPlayed || 0, 
+               playerData.wins || 0, playerData.losses || 0, playerData.id]
+            );
+          } catch (insertError) {
+            // If unique constraint fails, update the existing record instead
+            if (insertError.message && insertError.message.includes('UNIQUE constraint')) {
+              console.log('Player already exists, updating instead');
+              await db.runAsync(
+                `UPDATE players SET name = ?, rating = ?, matchesPlayed = ?, wins = ?, losses = ?, synced = 1 
+                 WHERE firestoreId = ?`,
+                [playerData.name, playerData.rating, playerData.matchesPlayed || 0, 
+                 playerData.wins || 0, playerData.losses || 0, playerData.id]
+              );
+            } else {
+              throw insertError;
+            }
+          }
         }
       }
     } catch (error) {
-      console.error('Error updating local player:', error);
+      console.error('Error updating local player:', error?.message || error);
+      // Don't throw - continue with other syncs
     }
   }
 
@@ -199,12 +228,18 @@ class SyncManager {
    */
   async updateLocalMatch(matchData) {
     try {
+      // Validate matchData
+      if (!matchData || !matchData.id) {
+        console.warn('Invalid match data received from Firestore');
+        return;
+      }
+
       if (Platform.OS === 'web') {
         // Web: Use AsyncStorage
         const matchesJson = await AsyncStorage.getItem('@pingpong_matches');
         const matches = matchesJson ? JSON.parse(matchesJson) : [];
         
-        const existingIndex = matches.findIndex(m => m.id === matchData.id);
+        const existingIndex = matches.findIndex(m => m.id === matchData.id || m.firestoreId === matchData.id);
         if (existingIndex < 0) {
           matches.push({
             ...matchData,
@@ -216,14 +251,45 @@ class SyncManager {
       } else {
         // Native: Use SQLite
         const db = getDatabase();
-        if (!db) return;
+        if (!db) {
+          console.warn('Database not available for match sync');
+          return;
+        }
 
+        // First check if already exists by firestoreId
         const existing = await db.getFirstAsync(
           'SELECT id FROM matches WHERE firestoreId = ?',
           [matchData.id]
         );
 
-        if (!existing) {
+        if (existing) {
+          // Already exists, just return
+          console.log('Match already exists locally, skipping');
+          return;
+        }
+
+        // Check if there's a recent unsynced match with same data (this is the one we just created)
+        const recentMatch = await db.getFirstAsync(
+          `SELECT id FROM matches 
+           WHERE playerA = ? AND playerB = ? AND winner = ? 
+           AND firestoreId IS NULL 
+           AND ABS(date - ?) < 5000
+           ORDER BY date DESC LIMIT 1`,
+          [matchData.playerA, matchData.playerB, matchData.winner, matchData.timestamp]
+        );
+
+        if (recentMatch) {
+          // This is our local match, just update it with the Firestore ID
+          await db.runAsync(
+            'UPDATE matches SET firestoreId = ?, synced = 1 WHERE id = ?',
+            [matchData.id, recentMatch.id]
+          );
+          console.log('Updated local match with Firestore ID');
+          return;
+        }
+
+        // New match from another device, insert it
+        try {
           await db.runAsync(
             `INSERT INTO matches (playerA, playerB, winner, date, ratingA_before, ratingA_after, 
              ratingB_before, ratingB_after, firestoreId, synced) 
@@ -235,10 +301,30 @@ class SyncManager {
               matchData.id
             ]
           );
+          console.log('Inserted new match from Firebase');
+        } catch (insertError) {
+          // If unique constraint still fails somehow, just update
+          if (insertError.message && insertError.message.includes('UNIQUE constraint')) {
+            console.log('Match collision detected, updating existing');
+            await db.runAsync(
+              `UPDATE matches SET playerA = ?, playerB = ?, winner = ?, date = ?, 
+               ratingA_before = ?, ratingA_after = ?, ratingB_before = ?, ratingB_after = ?, synced = 1
+               WHERE firestoreId = ?`,
+              [
+                matchData.playerA, matchData.playerB, matchData.winner, matchData.timestamp,
+                matchData.ratingA_before, matchData.ratingA_after,
+                matchData.ratingB_before, matchData.ratingB_after,
+                matchData.id
+              ]
+            );
+          } else {
+            throw insertError;
+          }
         }
       }
     } catch (error) {
-      console.error('Error updating local match:', error);
+      console.error('Error updating local match:', error?.message || error);
+      // Don't throw - continue with other syncs
     }
   }
 
@@ -279,6 +365,8 @@ class SyncManager {
         name: playerData.name,
         rating: playerData.rating || playerData.elo,
         matchesPlayed: playerData.matchesPlayed || 0,
+        wins: playerData.wins || 0,
+        losses: playerData.losses || 0,
         updatedAt: serverTimestamp()
       });
 
