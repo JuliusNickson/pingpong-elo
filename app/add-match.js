@@ -33,15 +33,24 @@ export default function AddMatchScreen() {
       return;
     }
 
-    // Calculate new ELO ratings
-    const { winnerNewElo, loserNewElo } = calculateNewElo(
+    // Calculate new ELO ratings with dynamic K-factor based on RD
+    const { 
+      winnerNewElo, 
+      loserNewElo, 
+      winnerNewRd, 
+      loserNewRd,
+      winnerK,
+      loserK,
+    } = calculateNewElo(
       winnerPlayer.elo,
-      loserPlayer.elo
+      loserPlayer.elo,
+      winnerPlayer.rd || 300,
+      loserPlayer.rd || 300
     );
 
-    // Update player ELOs
-    updatePlayerElo(winner, winnerNewElo);
-    updatePlayerElo(loser, loserNewElo);
+    // Update player ELOs, RD, and win/loss records
+    updatePlayerElo(winner, winnerNewElo, winnerNewRd, true);
+    updatePlayerElo(loser, loserNewElo, loserNewRd, false);
 
     // Add match to history with database schema
     addMatch({

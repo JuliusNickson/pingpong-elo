@@ -158,9 +158,11 @@ class SyncManager {
           name: playerData.name,
           rating: playerData.rating,
           elo: playerData.rating,
+          rd: playerData.rd || 300,
           matchesPlayed: playerData.matchesPlayed || 0,
           wins: playerData.wins || 0,
           losses: playerData.losses || 0,
+          lastPlayed: playerData.lastPlayed || 0,
           firestoreId: playerData.id,
           synced: true
         };
@@ -188,28 +190,28 @@ class SyncManager {
 
         if (existing) {
           await db.runAsync(
-            `UPDATE players SET name = ?, rating = ?, matchesPlayed = ?, wins = ?, losses = ?, synced = 1 
+            `UPDATE players SET name = ?, rating = ?, rd = ?, matchesPlayed = ?, wins = ?, losses = ?, lastPlayed = ?, synced = 1 
              WHERE firestoreId = ?`,
-            [playerData.name, playerData.rating, playerData.matchesPlayed || 0, 
-             playerData.wins || 0, playerData.losses || 0, playerData.id]
+            [playerData.name, playerData.rating, playerData.rd || 300, playerData.matchesPlayed || 0, 
+             playerData.wins || 0, playerData.losses || 0, playerData.lastPlayed || 0, playerData.id]
           );
         } else {
           try {
             await db.runAsync(
-              `INSERT INTO players (name, rating, matchesPlayed, wins, losses, firestoreId, synced) 
-               VALUES (?, ?, ?, ?, ?, ?, 1)`,
-              [playerData.name, playerData.rating, playerData.matchesPlayed || 0, 
-               playerData.wins || 0, playerData.losses || 0, playerData.id]
+              `INSERT INTO players (name, rating, rd, matchesPlayed, wins, losses, lastPlayed, firestoreId, synced) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+              [playerData.name, playerData.rating, playerData.rd || 300, playerData.matchesPlayed || 0, 
+               playerData.wins || 0, playerData.losses || 0, playerData.lastPlayed || 0, playerData.id]
             );
           } catch (insertError) {
             // If unique constraint fails, update the existing record instead
             if (insertError.message && insertError.message.includes('UNIQUE constraint')) {
               console.log('Player already exists, updating instead');
               await db.runAsync(
-                `UPDATE players SET name = ?, rating = ?, matchesPlayed = ?, wins = ?, losses = ?, synced = 1 
+                `UPDATE players SET name = ?, rating = ?, rd = ?, matchesPlayed = ?, wins = ?, losses = ?, lastPlayed = ?, synced = 1 
                  WHERE firestoreId = ?`,
-                [playerData.name, playerData.rating, playerData.matchesPlayed || 0, 
-                 playerData.wins || 0, playerData.losses || 0, playerData.id]
+                [playerData.name, playerData.rating, playerData.rd || 300, playerData.matchesPlayed || 0, 
+                 playerData.wins || 0, playerData.losses || 0, playerData.lastPlayed || 0, playerData.id]
               );
             } else {
               throw insertError;
@@ -364,9 +366,11 @@ class SyncManager {
       await setDoc(doc(db, 'players', playerId), {
         name: playerData.name,
         rating: playerData.rating || playerData.elo,
+        rd: playerData.rd || 300,
         matchesPlayed: playerData.matchesPlayed || 0,
         wins: playerData.wins || 0,
         losses: playerData.losses || 0,
+        lastPlayed: playerData.lastPlayed || 0,
         updatedAt: serverTimestamp()
       });
 

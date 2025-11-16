@@ -24,9 +24,11 @@ export async function initDatabase() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
         rating INTEGER NOT NULL DEFAULT 1000,
+        rd INTEGER NOT NULL DEFAULT 300,
         matchesPlayed INTEGER NOT NULL DEFAULT 0,
         wins INTEGER NOT NULL DEFAULT 0,
         losses INTEGER NOT NULL DEFAULT 0,
+        lastPlayed INTEGER DEFAULT 0,
         firestoreId TEXT UNIQUE,
         synced INTEGER DEFAULT 0,
         lastModified INTEGER DEFAULT 0
@@ -61,6 +63,16 @@ export async function initDatabase() {
     if (!columnNames.includes('losses')) {
       await db.execAsync(`ALTER TABLE players ADD COLUMN losses INTEGER DEFAULT 0;`);
       console.log('Added losses column to players');
+    }
+    
+    if (!columnNames.includes('rd')) {
+      await db.execAsync(`ALTER TABLE players ADD COLUMN rd INTEGER DEFAULT 300;`);
+      console.log('Added rd column to players');
+    }
+    
+    if (!columnNames.includes('lastPlayed')) {
+      await db.execAsync(`ALTER TABLE players ADD COLUMN lastPlayed INTEGER DEFAULT 0;`);
+      console.log('Added lastPlayed column to players');
     }
     
     // Create matches table with Firestore sync fields

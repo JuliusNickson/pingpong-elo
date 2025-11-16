@@ -5,12 +5,20 @@
 export const DEFAULT_ELO = 1000;
 
 /**
- * K-Factor for ELO calculation
- * Determines how much ratings change after each match
- * Higher values = more volatile ratings
- * Common values: 16 (FIDE for 2400+), 24 (intermediate), 32 (beginners/casual)
+ * Base K-Factor for ELO calculation (before RD adjustment)
+ * This gets multiplied by (RD / 200) for dynamic K-factor
  */
-export const K_FACTOR = 32;
+export const BASE_K_FACTOR = 20;
+
+/**
+ * Rating Deviation (RD) constants
+ * RD represents uncertainty in a player's rating
+ */
+export const DEFAULT_RD = 300;  // New players are uncertain
+export const MIN_RD = 50;       // Minimum uncertainty (very stable players)
+export const MAX_RD = 350;      // Maximum uncertainty
+export const RD_DECAY_PER_MATCH = 5;  // RD decreases when playing
+export const RD_INCREASE_PER_DAY = 2; // RD increases with inactivity
 
 /**
  * Minimum ELO rating

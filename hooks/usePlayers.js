@@ -64,8 +64,8 @@ export function usePlayers() {
     }
   };
 
-  const updatePlayerElo = async (playerId, newElo) => {
-    await updatePlayerRating(playerId, newElo);
+  const updatePlayerElo = async (playerId, newElo, newRd = null, isWinner = null) => {
+    await updatePlayerRating(playerId, newElo, newRd, isWinner);
     await loadPlayers(); // Reload to reflect changes
   };
 
