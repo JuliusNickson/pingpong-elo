@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Animated, Pressable } from 'react-native';
 import { COLORS } from '../constants/colors';
 import { FONTS, FONT_SIZES } from '../constants/fonts';
 
@@ -70,8 +70,7 @@ export default function PlayerCard({ player, rank }) {
   };
 
   return (
-    <TouchableOpacity
-      activeOpacity={1}
+    <Pressable
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
     >
@@ -101,7 +100,7 @@ export default function PlayerCard({ player, rank }) {
           <Text style={styles.eloLabel}>ELO</Text>
         </View>
       </Animated.View>
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 

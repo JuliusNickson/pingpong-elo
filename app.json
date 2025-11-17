@@ -23,7 +23,24 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro",
+      "preferRelatedApplications": false,
+      "lang": "en",
+      "name": "Ping Pong Elo Rankings",
+      "shortName": "PingPongElo",
+      "description": "Track and manage ping pong match results with Elo ratings",
+      "themeColor": "#0066CC",
+      "backgroundColor": "#ffffff",
+      "orientation": "portrait",
+      "display": "standalone",
+      "startUrl": "/",
+      "scope": "/",
+      "config": {
+        "firebase": {
+          "measurementId": "G-XXXXXXXXXX"
+        }
+      }
     },
     "plugins": [
       "expo-router",

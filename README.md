@@ -1,50 +1,80 @@
-# Welcome to your Expo app 👋
+# Pingpong ELO Tracker 🏓
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A Progressive Web App (PWA) for tracking ping pong matches and ELO ratings with Firebase backend.
 
-## Get started
+## 🚀 Quick Start
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+### Development
 ```bash
-npm run reset-project
+npm install
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Production (PWA)
+```bash
+npm run build:web
+firebase deploy --only hosting
+```
 
-## Learn more
+**Live App:** https://pingpong-elo-27d40.web.app
 
-To learn more about developing your project with Expo, look at the following resources:
+## 📱 Features
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- ⚡ **Progressive Web App** - Install on any device
+- 🔐 **Firebase Authentication** - Secure user login
+- 📊 **ELO Rating System** - Track player rankings
+- 🎮 **Match Requests** - Challenge other players
+- 📜 **Match History** - View all past games
+- 🏆 **Leaderboard** - See top players
+- 📴 **Offline Support** - Works without internet
 
-## Join the community
+## 📚 Documentation
 
-Join our community of developers creating universal apps.
+All documentation is in the [`docs/`](./docs/) folder:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- **[QUICKSTART_PWA.md](./docs/QUICKSTART_PWA.md)** - Quick PWA setup guide
+- **[PWA_README.md](./docs/PWA_README.md)** - Complete PWA implementation details
+- **[PWA_TESTING.md](./docs/PWA_TESTING.md)** - Testing guide for service worker and installation
+- **[FIREBASE_SECURITY.md](./docs/FIREBASE_SECURITY.md)** - Firestore security rules setup
+- **[FIREBASE_README.md](./docs/FIREBASE_README.md)** - Firebase integration guide
+- **[INTEGRATION_SUMMARY.md](./docs/INTEGRATION_SUMMARY.md)** - Architecture overview
+- **[PHASE3_4_COMPLETE.md](./docs/PHASE3_4_COMPLETE.md)** - PWA transformation phases
+
+## 🛠 Tech Stack
+
+- **Frontend:** React Native + Expo Router
+- **Backend:** Firebase (Auth + Firestore)
+- **Deployment:** Firebase Hosting
+- **PWA:** Service Worker + Web Manifest
+
+## 📦 Project Structure
+
+```
+pingpong-elo/
+├── app/              # Expo Router pages
+├── components/       # React components
+├── contexts/         # React Context (Auth)
+├── hooks/            # Custom hooks
+├── utils/            # Firebase & helper functions
+├── constants/        # Colors, styles
+├── scripts/          # Build scripts (PWA injection)
+├── docs/             # All documentation
+└── dist/             # Built PWA (generated)
+```
+
+## 🔧 Development
+
+This project uses Expo Router for file-based routing. Edit files in the `app/` directory to modify screens.
+
+## 🌐 Deployment
+
+Deploy updates with:
+```bash
+npm run build:web && firebase deploy --only hosting
+```
+
+Your changes will be live at https://pingpong-elo-27d40.web.app within seconds.
+
+## 📄 License
+
+MIT

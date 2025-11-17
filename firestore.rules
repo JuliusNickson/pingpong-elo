@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================
+    // USER PROFILES
+    // ============================================
+    // Users can read any profile (for leaderboard)
+    // Users can only create/update their own profile
+    // TEMP: Allow updating other profiles for match acceptance
+    // TODO: Move match processing to Cloud Functions
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      
+      // Allow creating own profile
+      allow create: if request.auth != null && request.auth.uid == uid;
+      
+      // TEMPORARY: Allow any authenticated user to update profiles
+      // This is needed because when a match is accepted, both players'
+      // ratings need to be updated. In production, use Cloud Functions.
+      allow update: if request.auth != null;
+      
+      // Never allow deleting profiles
+      allow delete: if false;
+    }
+    
+    // ============================================
+    // MATCH REQUESTS
+    // ============================================
+    // Authenticated users can read all requests
+    // Users can create requests where they are the sender
+    // Users can update/delete requests they're involved in
+    match /matchRequests/{requestId} {
+      allow read: if request.auth != null;
+      
+      // Can create if you're the sender
+      allow create: if request.auth != null && 
+                       request.resource.data.senderUid == request.auth.uid;
+      
+      // Can update if you're the sender or opponent
+      allow update: if request.auth != null && 
+                       (resource.data.senderUid == request.auth.uid ||
+                        resource.data.opponentUid == request.auth.uid);
+      
+      // Can delete if you're the sender or opponent
+      allow delete: if request.auth != null &&
+                       (resource.data.senderUid == request.auth.uid ||
+                        resource.data.opponentUid == request.auth.uid);
+    }
+    
+    // ============================================
+    // MATCHES (Match History)
+    // ============================================
+    // Authenticated users can read all matches
+    // Users can create matches (after accepting request)
+    // Matches are immutable once created
+    match /matches/{matchId} {
+      allow read: if request.auth != null;
+      
+      // Can create if you're one of the players
+      allow create: if request.auth != null &&
+                       (request.resource.data.userUid == request.auth.uid ||
+                        request.resource.data.opponentUid == request.auth.uid);
+      
+      // Matches are immutable - can't update or delete
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}

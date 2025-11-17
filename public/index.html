@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+  
+  <!-- PWA Primary Meta Tags -->
+  <title>Ping Pong Elo Rankings</title>
+  <meta name="title" content="Ping Pong Elo Rankings" />
+  <meta name="description" content="Track and manage ping pong match results with Elo ratings" />
+  
+  <!-- Mobile Meta Tags -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="PingPongElo" />
+  
+  <!-- Theme Color -->
+  <meta name="theme-color" content="#0066CC" />
+  <meta name="msapplication-TileColor" content="#0066CC" />
+  <meta name="msapplication-navbutton-color" content="#0066CC" />
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="shortcut icon" href="/favicon.png" />
+  
+  <!-- Apple Touch Icons -->
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png" />
+  
+  <!-- Splash Screen (iOS) -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  
+  <style>
+    /**
+     * Disable body scrolling on web. This makes ScrollView components work closer to how they do on native.
+     * However, body scrolling is often nice to have for mobile web. If you want to enable it, remove this line.
+     */
+    body {
+      overflow: hidden;
+    }
+
+    /* Loading spinner */
+    #root {
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <!-- The root element for your Expo app. -->
+  <div id="root"></div>
+  
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/service-worker.js')
+          .then(function(registration) {
+            console.log('ServiceWorker registration successful');
+          })
+          .catch(function(err) {
+            console.log('ServiceWorker registration failed: ', err);
+          });
+      });
+    }
+  </script>
+</body>
+</html>

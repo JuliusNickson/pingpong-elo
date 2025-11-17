@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { Pressable, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { COLORS } from '../constants/colors';
 
 export default function Button({ 
@@ -9,11 +9,12 @@ export default function Button({
   disabled = false,
   loading = false 
 }) {
-  const getButtonStyle = () => {
-    if (disabled) return [styles.button, styles.disabled];
-    if (variant === 'danger') return [styles.button, styles.danger];
-    if (variant === 'secondary') return [styles.button, styles.secondary];
-    return styles.button;
+  const getButtonStyle = (pressed) => {
+    const baseStyle = [styles.button];
+    if (disabled) return [...baseStyle, styles.disabled];
+    if (variant === 'danger') return [...baseStyle, styles.danger, pressed && styles.pressed];
+    if (variant === 'secondary') return [...baseStyle, styles.secondary, pressed && styles.pressed];
+    return [...baseStyle, pressed && styles.pressed];
   };
 
   const getTextStyle = () => {
@@ -22,18 +23,17 @@ export default function Button({
   };
 
   return (
-    <TouchableOpacity
-      style={getButtonStyle()}
+    <Pressable
+      style={({ pressed }) => getButtonStyle(pressed)}
       onPress={onPress}
       disabled={disabled || loading}
-      activeOpacity={0.8}
     >
       {loading ? (
         <ActivityIndicator color="#fff" />
       ) : (
         <Text style={getTextStyle()}>{title}</Text>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -46,6 +46,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 50,
+  },
+  pressed: {
+    opacity: 0.8,
   },
   danger: {
     backgroundColor: COLORS.error,

@@ -1,6 +1,17 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
-import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { 
+  getFirestore, 
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  initializeAuth, 
+  getReactNativePersistence,
+  setPersistence,
+  browserLocalPersistence
+} from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -34,12 +45,30 @@ export function initFirebase() {
   try {
     if (!app) {
       app = initializeApp(firebaseConfig);
-      db = getFirestore(app);
+      
+      // Initialize Firestore with modern persistence
+      if (Platform.OS === 'web') {
+        db = initializeFirestore(app, {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager()
+          })
+        });
+      } else {
+        db = getFirestore(app);
+      }
       
       // Initialize Auth with persistence
       try {
         if (Platform.OS === 'web') {
           auth = getAuth(app);
+          // Set persistence to keep users logged in
+          setPersistence(auth, browserLocalPersistence)
+            .then(() => {
+              console.log('Browser local persistence enabled');
+            })
+            .catch((error) => {
+              console.warn('Could not enable persistence:', error);
+            });
         } else {
           // For React Native, use AsyncStorage for auth persistence
           auth = initializeAuth(app, {
@@ -50,17 +79,6 @@ export function initFirebase() {
         console.error('Auth initialization error:', authError);
         // Fallback: try getAuth for React Native too
         auth = getAuth(app);
-      }
-      
-      // Enable offline persistence for web
-      if (Platform.OS === 'web') {
-        enableIndexedDbPersistence(db).catch((err) => {
-          if (err.code === 'failed-precondition') {
-            console.warn('Multiple tabs open, persistence enabled in first tab only');
-          } else if (err.code === 'unimplemented') {
-            console.warn('Browser doesn\'t support persistence');
-          }
-        });
       }
       
       console.log('Firebase initialized successfully');

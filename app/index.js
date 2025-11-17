@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserProfile, createUserProfile } from '../utils/userProfile';
@@ -97,9 +97,9 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>Hello,</Text>
           <Text style={styles.username}>{user?.displayName || 'Player'}</Text>
         </View>
-        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+        <Pressable style={({ pressed }) => [styles.signOutButton, pressed && styles.pressed]} onPress={handleSignOut}>
           <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
       
       {profile && (
@@ -123,41 +123,41 @@ export default function HomeScreen() {
       )}
       
       <View style={styles.navigation}>
-        <TouchableOpacity 
-          style={styles.navButton}
+        <Pressable 
+          style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
           onPress={() => router.push('/add-match')}
         >
           <Text style={styles.navButtonIcon}>🏓</Text>
           <Text style={styles.navButtonText}>Challenge Player</Text>
           <Text style={styles.navButtonSubtext}>Send match request</Text>
-        </TouchableOpacity>
+        </Pressable>
         
-        <TouchableOpacity 
-          style={styles.navButton}
+        <Pressable 
+          style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
           onPress={() => router.push('/requests')}
         >
           <Text style={styles.navButtonIcon}>📬</Text>
           <Text style={styles.navButtonText}>Match Requests</Text>
           <Text style={styles.navButtonSubtext}>View pending requests</Text>
-        </TouchableOpacity>
+        </Pressable>
         
-        <TouchableOpacity 
-          style={styles.navButton}
+        <Pressable 
+          style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
           onPress={() => router.push('/history')}
         >
           <Text style={styles.navButtonIcon}>📜</Text>
           <Text style={styles.navButtonText}>Match History</Text>
           <Text style={styles.navButtonSubtext}>View past matches</Text>
-        </TouchableOpacity>
+        </Pressable>
         
-        <TouchableOpacity 
-          style={styles.navButton}
+        <Pressable 
+          style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
           onPress={() => router.push('/players')}
         >
           <Text style={styles.navButtonIcon}>🏆</Text>
           <Text style={styles.navButtonText}>Leaderboard</Text>
           <Text style={styles.navButtonSubtext}>See top players</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     </ScrollView>
   );
@@ -233,5 +233,8 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.small,
     fontFamily: FONTS.body,
     color: COLORS.textSecondary,
+  },
+  pressed: {
+    opacity: 0.7,
   },
 });
