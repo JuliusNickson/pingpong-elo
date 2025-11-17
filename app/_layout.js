@@ -3,7 +3,6 @@ import { View, ActivityIndicator } from 'react-native';
 import { useEffect } from 'react';
 import { useAppFonts } from '../hooks/useAppFonts';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { initDatabase } from '../utils/database';
 import { COLORS } from '../constants/colors';
 
 function RootLayoutNav() {
@@ -11,11 +10,6 @@ function RootLayoutNav() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
-
-  // Initialize database on mount
-  useEffect(() => {
-    initDatabase();
-  }, []);
 
   useEffect(() => {
     if (loading || !fontsLoaded) return;

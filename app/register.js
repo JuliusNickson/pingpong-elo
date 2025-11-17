@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -14,6 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { registerUser, getAuthErrorMessage } from '../utils/auth';
 import { createUserProfile } from '../utils/userProfile';
+import { showSimpleAlert } from '../utils/alerts';
 import { COLORS } from '../constants/colors';
 import { FONTS, FONT_SIZES } from '../constants/fonts';
 
@@ -28,17 +28,17 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     // Validation
     if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
+      showSimpleAlert('Error', 'Please fill in all fields');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      showSimpleAlert('Error', 'Passwords do not match');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      showSimpleAlert('Error', 'Password must be at least 6 characters');
       return;
     }
 
@@ -47,14 +47,14 @@ export default function RegisterScreen() {
       const user = await registerUser(email, password, name);
       // Create user profile in Firestore
       await createUserProfile(user.uid, name, email);
-      Alert.alert('Success', 'Account created successfully!');
+      showSimpleAlert('Success', 'Account created successfully!');
       // Navigation will be handled by AuthContext listener
     } catch (error) {
       console.error('Registration error:', error);
       const errorMessage = error.code === 'auth/configuration-not-found' 
         ? 'Firebase Authentication is not enabled. Please enable Email/Password authentication in Firebase Console.'
         : getAuthErrorMessage(error);
-      Alert.alert('Registration Failed', errorMessage);
+      showSimpleAlert('Registration Failed', errorMessage);
     } finally {
       setLoading(false);
     }

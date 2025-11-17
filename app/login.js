@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signIn, getAuthErrorMessage } from '../utils/auth';
+import { showSimpleAlert } from '../utils/alerts';
 import { COLORS } from '../constants/colors';
 import { FONTS, FONT_SIZES } from '../constants/fonts';
 
@@ -24,7 +24,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
+      showSimpleAlert('Error', 'Please enter both email and password');
       return;
     }
 
@@ -37,7 +37,7 @@ export default function LoginScreen() {
       const errorMessage = error.code === 'auth/configuration-not-found' 
         ? 'Firebase Authentication is not enabled. Please enable Email/Password authentication in Firebase Console.'
         : getAuthErrorMessage(error);
-      Alert.alert('Login Failed', errorMessage);
+      showSimpleAlert('Login Failed', errorMessage);
     } finally {
       setLoading(false);
     }

@@ -178,7 +178,7 @@ export async function acceptMatchRequest(requestId, opponentUid) {
       loserProfile.rd
     );
 
-    // Update both players' profiles
+    // Update both players' profiles and the match request
     await Promise.all([
       updateUserProfile(request.senderUid, {
         rating: winnerNewElo,
@@ -193,6 +193,10 @@ export async function acceptMatchRequest(requestId, opponentUid) {
         matchesPlayed: (loserProfile.matchesPlayed || 0) + 1,
         losses: (loserProfile.losses || 0) + 1,
         lastPlayed: serverTimestamp()
+      }),
+      updateDoc(requestRef, {
+        status: 'accepted',
+        updatedAt: serverTimestamp()
       })
     ]);
 
@@ -201,12 +205,15 @@ export async function acceptMatchRequest(requestId, opponentUid) {
       userUid: request.senderUid,
       opponentUid: request.opponentUid,
       winnerUid: request.senderUid,
+      userName: request.senderName,
+      opponentName: request.opponentName,
       userRatingBefore: winnerProfile.rating,
       userRatingAfter: winnerNewElo,
       opponentRatingBefore: loserProfile.rating,
       opponentRatingAfter: loserNewElo,
       requestId: requestId
     });
+
 
     // Update request status
     await updateDoc(requestRef, {

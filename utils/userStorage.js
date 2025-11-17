@@ -1,6 +1,4 @@
-import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getDatabase } from './database';
 
 const USER_PROFILE_KEY = '@current_user_profile';
 
@@ -11,59 +9,9 @@ const USER_PROFILE_KEY = '@current_user_profile';
  */
 export async function saveCurrentUserProfile(userProfile) {
   try {
-    if (Platform.OS === 'web') {
-      await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(userProfile));
-    } else {
-      const db = getDatabase();
-      if (!db) return false;
-      
-      // Check if profile exists
-      const existing = await db.getFirstAsync('SELECT uid FROM user_profile WHERE id = 1');
-      
-      if (existing) {
-        // Update existing profile
-        await db.runAsync(
-          `UPDATE user_profile SET 
-            uid = ?, displayName = ?, email = ?, rating = ?, rd = ?, 
-            matchesPlayed = ?, wins = ?, losses = ?, lastPlayed = ?, 
-            synced = ?, lastModified = ?
-          WHERE id = 1`,
-          [
-            userProfile.uid,
-            userProfile.displayName,
-            userProfile.email,
-            userProfile.rating || 1000,
-            userProfile.rd || 300,
-            userProfile.matchesPlayed || 0,
-            userProfile.wins || 0,
-            userProfile.losses || 0,
-            userProfile.lastPlayed || 0,
-            userProfile.synced ? 1 : 0,
-            Date.now()
-          ]
-        );
-      } else {
-        // Insert new profile
-        await db.runAsync(
-          `INSERT INTO user_profile 
-            (id, uid, displayName, email, rating, rd, matchesPlayed, wins, losses, lastPlayed, synced, lastModified)
-          VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            userProfile.uid,
-            userProfile.displayName,
-            userProfile.email,
-            userProfile.rating || 1000,
-            userProfile.rd || 300,
-            userProfile.matchesPlayed || 0,
-            userProfile.wins || 0,
-            userProfile.losses || 0,
-            userProfile.lastPlayed || 0,
-            userProfile.synced ? 1 : 0,
-            Date.now()
-          ]
-        );
-      }
-    }
+    // Use AsyncStorage for all platforms for simplicity and reliability
+    await AsyncStorage.setItem(USER_PROFILE_KEY, JSON.stringify(userProfile));
+    console.log('User profile saved to AsyncStorage');
     return true;
   } catch (error) {
     console.error('Error saving user profile:', error);
@@ -77,16 +25,9 @@ export async function saveCurrentUserProfile(userProfile) {
  */
 export async function getCurrentUserProfile() {
   try {
-    if (Platform.OS === 'web') {
-      const jsonValue = await AsyncStorage.getItem(USER_PROFILE_KEY);
-      return jsonValue != null ? JSON.parse(jsonValue) : null;
-    } else {
-      const db = getDatabase();
-      if (!db) return null;
-      
-      const profile = await db.getFirstAsync('SELECT * FROM user_profile WHERE id = 1');
-      return profile || null;
-    }
+    // Use AsyncStorage for all platforms
+    const jsonValue = await AsyncStorage.getItem(USER_PROFILE_KEY);
+    return jsonValue != null ? JSON.parse(jsonValue) : null;
   } catch (error) {
     console.error('Error getting user profile:', error);
     return null;
@@ -99,16 +40,9 @@ export async function getCurrentUserProfile() {
  */
 export async function clearCurrentUserProfile() {
   try {
-    if (Platform.OS === 'web') {
-      await AsyncStorage.removeItem(USER_PROFILE_KEY);
-    } else {
-      const db = getDatabase();
-      if (!db) return false;
-      
-      await db.runAsync('DELETE FROM user_profile WHERE id = 1');
-      // Also clear opponents cache
-      await db.runAsync('DELETE FROM opponents');
-    }
+    // Use AsyncStorage for all platforms
+    await AsyncStorage.removeItem(USER_PROFILE_KEY);
+    console.log('User profile cleared from AsyncStorage');
     return true;
   } catch (error) {
     console.error('Error clearing user profile:', error);
@@ -146,58 +80,9 @@ export async function updateCurrentUserStats(updates) {
  */
 export async function cacheOpponent(opponent) {
   try {
-    if (Platform.OS === 'web') {
-      // For web, we don't need to cache opponents
-      return true;
-    }
-    
-    const db = getDatabase();
-    if (!db) return false;
-    
-    const existing = await db.getFirstAsync(
-      'SELECT uid FROM opponents WHERE uid = ?',
-      [opponent.uid]
-    );
-    
-    if (existing) {
-      await db.runAsync(
-        `UPDATE opponents SET 
-          displayName = ?, email = ?, rating = ?, rd = ?,
-          matchesPlayed = ?, wins = ?, losses = ?, lastPlayed = ?, lastFetched = ?
-        WHERE uid = ?`,
-        [
-          opponent.displayName,
-          opponent.email,
-          opponent.rating || 1000,
-          opponent.rd || 300,
-          opponent.matchesPlayed || 0,
-          opponent.wins || 0,
-          opponent.losses || 0,
-          opponent.lastPlayed || 0,
-          Date.now(),
-          opponent.uid
-        ]
-      );
-    } else {
-      await db.runAsync(
-        `INSERT INTO opponents 
-          (uid, displayName, email, rating, rd, matchesPlayed, wins, losses, lastPlayed, lastFetched)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          opponent.uid,
-          opponent.displayName,
-          opponent.email,
-          opponent.rating || 1000,
-          opponent.rd || 300,
-          opponent.matchesPlayed || 0,
-          opponent.wins || 0,
-          opponent.losses || 0,
-          opponent.lastPlayed || 0,
-          Date.now()
-        ]
-      );
-    }
-    
+    // Use AsyncStorage to cache opponents
+    const key = `@opponent_${opponent.uid}`;
+    await AsyncStorage.setItem(key, JSON.stringify(opponent));
     return true;
   } catch (error) {
     console.error('Error caching opponent:', error);
@@ -212,19 +97,9 @@ export async function cacheOpponent(opponent) {
  */
 export async function getCachedOpponent(uid) {
   try {
-    if (Platform.OS === 'web') {
-      return null; // Web doesn't cache
-    }
-    
-    const db = getDatabase();
-    if (!db) return null;
-    
-    const opponent = await db.getFirstAsync(
-      'SELECT * FROM opponents WHERE uid = ?',
-      [uid]
-    );
-    
-    return opponent || null;
+    const key = `@opponent_${uid}`;
+    const jsonValue = await AsyncStorage.getItem(key);
+    return jsonValue != null ? JSON.parse(jsonValue) : null;
   } catch (error) {
     console.error('Error getting cached opponent:', error);
     return null;

@@ -95,41 +95,30 @@ export function isFirebaseConfigured() {
  * 
  * Copy these rules to your Firebase Console > Firestore Database > Rules:
  * 
+ * TEMPORARY DEV RULES (allows authenticated users to update any profile)
+ * TODO: Implement Cloud Functions for proper server-side match processing
+ * 
  * rules_version = '2';
  * service cloud.firestore {
  *   match /databases/{database}/documents {
- *     // Users can read all profiles (for leaderboard/search)
- *     // Users can only write their own profile
+ *     // TEMPORARY: Allow authenticated users to read/write profiles
+ *     // Needed because match acceptance updates both players' profiles
  *     match /users/{uid} {
  *       allow read: if request.auth != null;
- *       allow create, update: if request.auth != null && request.auth.uid == uid;
+ *       allow create, update: if request.auth != null;
  *       allow delete: if false;
  *     }
  *     
- *     // Match requests: sender can create/cancel, opponent can accept/decline
+ *     // Match requests: authenticated users can read/write
  *     match /matchRequests/{requestId} {
- *       allow read: if request.auth != null && (
- *         request.auth.uid == resource.data.senderUid ||
- *         request.auth.uid == resource.data.opponentUid
- *       );
- *       allow create: if request.auth != null && 
- *         request.auth.uid == request.resource.data.senderUid;
- *       allow update: if request.auth != null && (
- *         (request.auth.uid == resource.data.senderUid && 
- *          request.resource.data.status == 'cancelled') ||
- *         (request.auth.uid == resource.data.opponentUid && 
- *          (request.resource.data.status == 'accepted' || 
- *           request.resource.data.status == 'declined'))
- *       );
- *       allow delete: if false;
+ *       allow read, write: if request.auth != null;
  *     }
  *     
- *     // Matches can be read by authenticated users
- *     // Can only be created (not edited) by authenticated users
+ *     // Matches: authenticated users can create, everyone can read
  *     match /matches/{matchId} {
  *       allow read: if request.auth != null;
  *       allow create: if request.auth != null;
- *       allow update, delete: if false;  // Nobody can edit old matches
+ *       allow update, delete: if false;
  *     }
  *   }
  * }

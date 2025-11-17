@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserProfile, createUserProfile } from '../utils/userProfile';
 import { getCurrentUserProfile, saveCurrentUserProfile, clearCurrentUserProfile } from '../utils/userStorage';
 import { signOut } from '../utils/auth';
+import { showSimpleAlert, showConfirm } from '../utils/alerts';
 import PlayerCard from '../components/PlayerCard';
-import SyncStatus from '../components/SyncStatus';
 import { COLORS } from '../constants/colors';
 import { FONTS, FONT_SIZES } from '../constants/fonts';
 
@@ -53,7 +53,7 @@ export default function HomeScreen() {
           }
         } catch (createError) {
           console.error('Error creating profile for user:', createError);
-          Alert.alert('Profile Error', 'Could not create user profile. Please try again or contact support.');
+          showSimpleAlert('Profile Error', 'Could not create user profile. Please try again or contact support.');
         }
       }
     } catch (error) {
@@ -64,24 +64,21 @@ export default function HomeScreen() {
   };
 
   const handleSignOut = async () => {
-    Alert.alert(
+    showConfirm(
       'Sign Out',
       'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clearCurrentUserProfile();
-              await signOut();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to sign out');
-            }
-          }
+      async () => {
+        try {
+          await clearCurrentUserProfile();
+          await signOut();
+        } catch (error) {
+          showSimpleAlert('Error', 'Failed to sign out');
         }
-      ]
+      },
+      undefined,
+      'Sign Out',
+      'Cancel',
+      'destructive'
     );
   };
 
@@ -95,8 +92,6 @@ export default function HomeScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <SyncStatus />
-      
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Hello,</Text>

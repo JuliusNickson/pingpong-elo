@@ -23,6 +23,8 @@ export async function saveMatch(matchData) {
       userUid: matchData.userUid,
       opponentUid: matchData.opponentUid,
       winnerUid: matchData.winnerUid,
+      userName: matchData.userName || null,
+      opponentName: matchData.opponentName || null,
       userRatingBefore: matchData.userRatingBefore,
       userRatingAfter: matchData.userRatingAfter,
       opponentRatingBefore: matchData.opponentRatingBefore,

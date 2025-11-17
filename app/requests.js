@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
@@ -16,6 +15,7 @@ import {
   declineMatchRequest,
   cancelMatchRequest,
 } from '../utils/matchRequests';
+import { showAlert, showSimpleAlert, showConfirm } from '../utils/alerts';
 import { COLORS } from '../constants/colors';
 import { FONTS } from '../constants/fonts';
 
@@ -27,12 +27,14 @@ export default function RequestsScreen() {
   const [processingId, setProcessingId] = useState(null);
 
   const loadRequests = async () => {
+    if (!user?.uid) return;
+    
     try {
       const data = await getMatchRequests(user.uid);
       setRequests(data);
     } catch (error) {
       console.error('Error loading requests:', error);
-      Alert.alert('Error', 'Failed to load match requests');
+      showSimpleAlert('Error', 'Failed to load match requests');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -40,8 +42,10 @@ export default function RequestsScreen() {
   };
 
   useEffect(() => {
-    loadRequests();
-  }, [user.uid]);
+    if (user?.uid) {
+      loadRequests();
+    }
+  }, [user?.uid]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -49,97 +53,75 @@ export default function RequestsScreen() {
   };
 
   const handleAccept = async (request) => {
-    Alert.alert(
+    showConfirm(
       'Confirm Loss',
       `Confirm that you lost to ${request.senderName}?\n\nThis will update both players' ratings.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Confirm Loss',
-          style: 'destructive',
-          onPress: async () => {
-            setProcessingId(request.id);
-            try {
-              const result = await acceptMatchRequest(request.id, user.uid);
-              Alert.alert(
-                'Match Recorded!',
-                `The match has been recorded.\n\nYour new rating: ${Math.round(result.loserNewRating)}`,
-                [{ text: 'OK', onPress: loadRequests }]
-              );
-            } catch (error) {
-              console.error('Error accepting request:', error);
-              Alert.alert('Error', error.message || 'Failed to accept match request');
-            } finally {
-              setProcessingId(null);
-            }
-          },
-        },
-      ]
+      async () => {
+        setProcessingId(request.id);
+        try {
+          const result = await acceptMatchRequest(request.id, user.uid);
+          showSimpleAlert(
+            'Match Recorded!',
+            `The match has been recorded.\n\nYour new rating: ${Math.round(result.loserNewRating)}`,
+            loadRequests
+          );
+        } catch (error) {
+          console.error('Error accepting request:', error);
+          showSimpleAlert('Error', error.message || 'Failed to accept match request');
+        } finally {
+          setProcessingId(null);
+        }
+      },
+      undefined,
+      'Confirm Loss',
+      'Cancel',
+      'destructive'
     );
   };
 
   const handleDecline = async (request) => {
-    Alert.alert(
+    showConfirm(
       'Decline Request',
       `Decline match request from ${request.senderName}?`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Decline',
-          style: 'destructive',
-          onPress: async () => {
-            setProcessingId(request.id);
-            try {
-              await declineMatchRequest(request.id, user.uid);
-              Alert.alert('Declined', 'Match request declined', [
-                { text: 'OK', onPress: loadRequests },
-              ]);
-            } catch (error) {
-              console.error('Error declining request:', error);
-              Alert.alert('Error', 'Failed to decline match request');
-            } finally {
-              setProcessingId(null);
-            }
-          },
-        },
-      ]
+      async () => {
+        setProcessingId(request.id);
+        try {
+          await declineMatchRequest(request.id, user.uid);
+          showSimpleAlert('Declined', 'Match request declined', loadRequests);
+        } catch (error) {
+          console.error('Error declining request:', error);
+          showSimpleAlert('Error', 'Failed to decline match request');
+        } finally {
+          setProcessingId(null);
+        }
+      },
+      undefined,
+      'Decline',
+      'Cancel',
+      'destructive'
     );
   };
 
   const handleCancel = async (request) => {
-    Alert.alert(
+    showConfirm(
       'Cancel Request',
       `Cancel match request to ${request.opponentName}?`,
-      [
-        {
-          text: 'No',
-          style: 'cancel',
-        },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            setProcessingId(request.id);
-            try {
-              await cancelMatchRequest(request.id, user.uid);
-              Alert.alert('Cancelled', 'Match request cancelled', [
-                { text: 'OK', onPress: loadRequests },
-              ]);
-            } catch (error) {
-              console.error('Error cancelling request:', error);
-              Alert.alert('Error', 'Failed to cancel match request');
-            } finally {
-              setProcessingId(null);
-            }
-          },
-        },
-      ]
+      async () => {
+        setProcessingId(request.id);
+        try {
+          await cancelMatchRequest(request.id, user.uid);
+          showSimpleAlert('Cancelled', 'Match request cancelled', loadRequests);
+        } catch (error) {
+          console.error('Error cancelling request:', error);
+          showSimpleAlert('Error', 'Failed to cancel match request');
+        } finally {
+          setProcessingId(null);
+        }
+      },
+      undefined,
+      'Yes, Cancel',
+      'No',
+      'destructive'
     );
   };
 
@@ -213,6 +195,15 @@ export default function RequestsScreen() {
       </View>
     );
   };
+
+  // Guard against null user
+  if (!user) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Please sign in to view match requests</Text>
+      </View>
+    );
+  }
 
   if (loading) {
     return (

@@ -3,7 +3,6 @@ import {
   View, 
   Text, 
   StyleSheet, 
-  Alert, 
   ScrollView, 
   TextInput,
   TouchableOpacity,
@@ -14,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { getLeaderboard } from '../utils/userProfile';
 import { createMatchRequest } from '../utils/matchRequests';
+import { showAlert, showSimpleAlert, showConfirm } from '../utils/alerts';
 import Button from '../components/Button';
 import { COLORS } from '../constants/colors';
 import { FONTS } from '../constants/fonts';
@@ -30,10 +30,14 @@ export default function AddMatchScreen() {
 
   // Load all players on mount
   useEffect(() => {
-    loadPlayers();
-  }, [user.uid]);
+    if (user?.uid) {
+      loadPlayers();
+    }
+  }, [user?.uid]);
 
   const loadPlayers = async () => {
+    if (!user?.uid) return;
+    
     setIsLoading(true);
     try {
       // Get all players from leaderboard (up to 500)
@@ -41,10 +45,10 @@ export default function AddMatchScreen() {
       // Filter out current user
       const otherPlayers = players.filter(p => p.uid !== user.uid);
       setAllPlayers(otherPlayers);
-      setFilteredPlayers(otherPlayers);
+      setFilteredPlayers(allPlayers);
     } catch (error) {
       console.error('Error loading players:', error);
-      Alert.alert('Error', 'Failed to load players');
+      showSimpleAlert('Error', 'Failed to load players');
     } finally {
       setIsLoading(false);
     }
@@ -65,51 +69,40 @@ export default function AddMatchScreen() {
   }, [searchQuery, allPlayers]);
 
   const handleSendRequest = async (opponent) => {
-    Alert.alert(
+    showConfirm(
       'Confirm Match Request',
       `Send match request to ${opponent.displayName}?\n\nYou are claiming you WON against them.\nThey must confirm the loss.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        },
-        {
-          text: 'Send Request',
-          onPress: async () => {
-            setIsSending(true);
-            try {
-              // Get current user's display name from local profile or auth
-              const currentUserName = user.displayName || user.email;
-              
-              await createMatchRequest(
-                user.uid,
-                opponent.uid,
-                currentUserName,
-                opponent.displayName
-              );
-              
-              Alert.alert(
-                'Request Sent!',
-                `Match request sent to ${opponent.displayName}. They will need to confirm the loss for the match to be recorded.`,
-                [
-                  {
-                    text: 'OK',
-                    onPress: () => {
-                      setSearchQuery('');
-                      router.push('/');
-                    }
-                  }
-                ]
-              );
-            } catch (error) {
-              console.error('Error sending match request:', error);
-              Alert.alert('Error', 'Failed to send match request');
-            } finally {
-              setIsSending(false);
+      async () => {
+        setIsSending(true);
+        try {
+          // Get current user's display name from local profile or auth
+          const currentUserName = user.displayName || user.email;
+          
+          await createMatchRequest(
+            user.uid,
+            opponent.uid,
+            currentUserName,
+            opponent.displayName
+          );
+          
+          showSimpleAlert(
+            'Request Sent!',
+            `Match request sent to ${opponent.displayName}. They will need to confirm the loss for the match to be recorded.`,
+            () => {
+              setSearchQuery('');
+              router.push('/');
             }
-          }
+          );
+        } catch (error) {
+          console.error('Error sending match request:', error);
+          showSimpleAlert('Error', 'Failed to send match request');
+        } finally {
+          setIsSending(false);
         }
-      ]
+      },
+      undefined,
+      'Send Request',
+      'Cancel'
     );
   };
 
@@ -134,6 +127,15 @@ export default function AddMatchScreen() {
       </TouchableOpacity>
     </View>
   );
+
+  // Guard against null user
+  if (!user) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Please sign in to challenge players</Text>
+      </View>
+    );
+  }
 
   if (isLoading) {
     return (
