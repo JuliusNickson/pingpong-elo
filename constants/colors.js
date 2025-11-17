@@ -1,28 +1,38 @@
 export const COLORS = {
-  // Primary colors
-  primary: '#2563EB',      // Blue
-  primaryDark: '#1E40AF',
-  primaryLight: '#3B82F6',
+  // Primary colors - Neon sports theme
+  primary: '#00E676',           // Neon green (sports vibe)
+  primaryDark: '#00C853',       // Darker green
+  primaryLight: '#69F0AE',      // Lighter green
   
-  // Background colors
-  background: '#F8FAFC',   // Light gray
-  surface: '#FFFFFF',      // White
+  // Secondary colors
+  secondary: '#2979FF',         // Neon blue
+  secondaryDark: '#2962FF',     // Darker blue
+  secondaryLight: '#448AFF',    // Lighter blue
+  
+  // Background colors - Dark matte
+  background: '#0E0E10',        // Dark matte background
+  surface: '#1A1A1C',           // Card/surface background
+  surfaceLight: '#2A2A2C',      // Lighter surface
   
   // Text colors
-  text: '#1E293B',         // Dark gray
-  textSecondary: '#64748B', // Medium gray
+  text: '#FFFFFF',              // White text
+  textSecondary: '#B0B0B0',     // Gray text
+  textTertiary: '#808080',      // Darker gray
   
   // Status colors
-  success: '#10B981',      // Green
-  error: '#EF4444',        // Red
-  warning: '#F59E0B',      // Orange
-  info: '#3B82F6',         // Blue
+  success: '#00E676',           // Neon green
+  error: '#FF5252',             // Red
+  warning: '#FFB74D',           // Orange
+  info: '#2979FF',              // Neon blue
   
   // Border colors
-  border: '#E2E8F0',       // Light gray
-  borderDark: '#CBD5E1',   // Medium gray
+  border: '#2A2A2C',            // Subtle border
+  borderDark: '#3A3A3C',        // Darker border
   
   // Additional colors
   shadow: '#000000',
-  overlay: 'rgba(0, 0, 0, 0.5)',
+  overlay: 'rgba(0, 0, 0, 0.7)',
+  
+  // Aliases for backwards compatibility
+  cardBackground: '#1A1A1C',
 };

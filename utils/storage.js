@@ -1,9 +1,22 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getDatabase } from './database';
+import { syncManager } from './sync';
+import { DEFAULT_RD } from '../constants/defaults';
+import { applyInactivityPenalty } from './rd';
 
 const PLAYERS_KEY = '@pingpong_players';
 const MATCHES_KEY = '@pingpong_matches';
+
+// Helper to get database only on native platforms
+let getDatabaseFn = null;
+async function getDatabase() {
+  if (Platform.OS === 'web') return null;
+  if (!getDatabaseFn) {
+    const dbModule = await import('./database');
+    getDatabaseFn = dbModule.getDatabase;
+  }
+  return getDatabaseFn();
+}
 
 /**
  * Get all players from database or AsyncStorage (web fallback)
@@ -15,23 +28,29 @@ export async function getPlayers() {
     if (Platform.OS === 'web') {
       const jsonValue = await AsyncStorage.getItem(PLAYERS_KEY);
       const players = jsonValue != null ? JSON.parse(jsonValue) : [];
-      return players.map(player => ({
+      const playersWithElo = players.map(player => ({
         ...player,
         elo: player.elo || player.rating,
       }));
+      
+      // Apply inactivity penalty to RD
+      return applyInactivityPenalty(playersWithElo);
     }
     
     // Native: Use SQLite
-    const db = getDatabase();
+    const db = await getDatabase();
     if (!db) return [];
     
     const result = await db.getAllAsync('SELECT * FROM players ORDER BY rating DESC');
-    return result.map(player => ({
+    const players = result.map(player => ({
       ...player,
-      wins: 0, // Will be calculated from matches
-      losses: 0, // Will be calculated from matches
+      wins: player.wins || 0,
+      losses: player.losses || 0,
       elo: player.rating, // Map rating to elo for compatibility
     }));
+    
+    // Apply inactivity penalty to RD
+    return applyInactivityPenalty(players);
   } catch (error) {
     console.error('Error reading players:', error);
     return [];
@@ -46,40 +65,74 @@ export async function getPlayers() {
  */
 export async function addPlayer(name, rating = 1000) {
   try {
+    let newPlayer;
+    
     // Web fallback
     if (Platform.OS === 'web') {
       const players = await getPlayers();
-      const newPlayer = {
+      newPlayer = {
         id: Date.now(),
+        name,
+        rating,
+        elo: rating,
+        rd: DEFAULT_RD,
+        matchesPlayed: 0,
+        wins: 0,
+        losses: 0,
+        lastPlayed: Date.now(),
+        synced: false
+      };
+      await AsyncStorage.setItem(PLAYERS_KEY, JSON.stringify([...players, newPlayer]));
+    } else {
+      // Native: Use SQLite
+      const db = await getDatabase();
+      if (!db) return null;
+      
+      const result = await db.runAsync(
+        'INSERT INTO players (name, rating, rd, matchesPlayed, synced, lastModified, lastPlayed) VALUES (?, ?, ?, 0, 0, ?, ?)',
+        [name, rating, DEFAULT_RD, Date.now(), Date.now()]
+      );
+      
+      newPlayer = {
+        id: result.lastInsertRowId,
         name,
         rating,
         elo: rating,
         matchesPlayed: 0,
         wins: 0,
         losses: 0,
+        synced: false
       };
-      await AsyncStorage.setItem(PLAYERS_KEY, JSON.stringify([...players, newPlayer]));
-      return newPlayer;
     }
     
-    // Native: Use SQLite
-    const db = getDatabase();
-    if (!db) return null;
+    // Sync to Firestore (optional - continues even if it fails)
+    if (syncManager && typeof syncManager.syncPlayerToFirestore === 'function') {
+      try {
+        const firestoreId = await syncManager.syncPlayerToFirestore(newPlayer);
+        
+        // Update local record with Firestore ID
+        if (firestoreId) {
+          newPlayer.firestoreId = firestoreId;
+          if (Platform.OS === 'web') {
+            const players = await getPlayers();
+            const updated = players.map(p => p.id === newPlayer.id ? { ...p, firestoreId, synced: true } : p);
+            await AsyncStorage.setItem(PLAYERS_KEY, JSON.stringify(updated));
+          } else {
+            const db = await getDatabase();
+            if (db) {
+              await db.runAsync(
+                'UPDATE players SET firestoreId = ?, synced = 1 WHERE id = ?',
+                [firestoreId, newPlayer.id]
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.log('Player saved locally, will sync to Firestore later:', error.message);
+      }
+    }
     
-    const result = await db.runAsync(
-      'INSERT INTO players (name, rating, matchesPlayed) VALUES (?, ?, 0)',
-      [name, rating]
-    );
-    
-    return {
-      id: result.lastInsertRowId,
-      name,
-      rating,
-      elo: rating,
-      matchesPlayed: 0,
-      wins: 0,
-      losses: 0,
-    };
+    return newPlayer;
   } catch (error) {
     console.error('Error adding player:', error);
     return null;
@@ -92,14 +145,33 @@ export async function addPlayer(name, rating = 1000) {
  * @param {number} newRating - New rating value
  * @returns {Promise<boolean>} Success status
  */
-export async function updatePlayerRating(playerId, newRating) {
+/**
+ * Update player rating and RD
+ * @param {number} playerId - Player ID
+ * @param {number} newRating - New ELO rating
+ * @param {number} newRd - New Rating Deviation
+ * @param {boolean} isWinner - Whether this player won (updates wins/losses)
+ * @returns {Promise<boolean>} Success status
+ */
+export async function updatePlayerRating(playerId, newRating, newRd = null, isWinner = null) {
   try {
+    const timestamp = Date.now();
+    
     // Web fallback
     if (Platform.OS === 'web') {
       const players = await getPlayers();
       const updated = players.map(p => 
         p.id === playerId 
-          ? { ...p, rating: Math.round(newRating), elo: Math.round(newRating), matchesPlayed: (p.matchesPlayed || 0) + 1 }
+          ? { 
+              ...p, 
+              rating: Math.round(newRating), 
+              elo: Math.round(newRating),
+              rd: newRd !== null ? newRd : (p.rd || 300),
+              lastPlayed: timestamp,
+              matchesPlayed: (p.matchesPlayed || 0) + 1,
+              wins: isWinner === true ? (p.wins || 0) + 1 : (p.wins || 0),
+              losses: isWinner === false ? (p.losses || 0) + 1 : (p.losses || 0)
+            }
           : p
       );
       await AsyncStorage.setItem(PLAYERS_KEY, JSON.stringify(updated));
@@ -107,13 +179,44 @@ export async function updatePlayerRating(playerId, newRating) {
     }
     
     // Native: Use SQLite
-    const db = getDatabase();
+    const db = await getDatabase();
     if (!db) return false;
     
-    await db.runAsync(
-      'UPDATE players SET rating = ?, matchesPlayed = matchesPlayed + 1 WHERE id = ?',
-      [Math.round(newRating), playerId]
-    );
+    if (newRd !== null) {
+      if (isWinner === true) {
+        await db.runAsync(
+          'UPDATE players SET rating = ?, rd = ?, lastPlayed = ?, matchesPlayed = matchesPlayed + 1, wins = wins + 1 WHERE id = ?',
+          [Math.round(newRating), newRd, timestamp, playerId]
+        );
+      } else if (isWinner === false) {
+        await db.runAsync(
+          'UPDATE players SET rating = ?, rd = ?, lastPlayed = ?, matchesPlayed = matchesPlayed + 1, losses = losses + 1 WHERE id = ?',
+          [Math.round(newRating), newRd, timestamp, playerId]
+        );
+      } else {
+        await db.runAsync(
+          'UPDATE players SET rating = ?, rd = ?, lastPlayed = ?, matchesPlayed = matchesPlayed + 1 WHERE id = ?',
+          [Math.round(newRating), newRd, timestamp, playerId]
+        );
+      }
+    } else {
+      if (isWinner === true) {
+        await db.runAsync(
+          'UPDATE players SET rating = ?, lastPlayed = ?, matchesPlayed = matchesPlayed + 1, wins = wins + 1 WHERE id = ?',
+          [Math.round(newRating), timestamp, playerId]
+        );
+      } else if (isWinner === false) {
+        await db.runAsync(
+          'UPDATE players SET rating = ?, lastPlayed = ?, matchesPlayed = matchesPlayed + 1, losses = losses + 1 WHERE id = ?',
+          [Math.round(newRating), timestamp, playerId]
+        );
+      } else {
+        await db.runAsync(
+          'UPDATE players SET rating = ?, lastPlayed = ?, matchesPlayed = matchesPlayed + 1 WHERE id = ?',
+          [Math.round(newRating), timestamp, playerId]
+        );
+      }
+    }
     return true;
   } catch (error) {
     console.error('Error updating player rating:', error);
@@ -137,7 +240,7 @@ export async function removePlayer(playerId) {
     }
     
     // Native: Use SQLite
-    const db = getDatabase();
+    const db = await getDatabase();
     if (!db) return false;
     
     await db.runAsync('DELETE FROM players WHERE id = ?', [playerId]);
@@ -161,7 +264,7 @@ export async function getMatches() {
     }
     
     // Native: Use SQLite
-    const db = getDatabase();
+    const db = await getDatabase();
     if (!db) return [];
     
     const result = await db.getAllAsync(`
@@ -202,6 +305,9 @@ export async function getMatches() {
  */
 export async function addMatch(matchData) {
   try {
+    let matchId;
+    const timestamp = Date.now();
+    
     // Web fallback
     if (Platform.OS === 'web') {
       const matches = await getMatches();
@@ -211,7 +317,7 @@ export async function addMatch(matchData) {
       const loserPlayer = players.find(p => (p.id === playerA || p.id === playerB) && p.id !== winner);
       
       const newMatch = {
-        id: Date.now().toString(),
+        id: timestamp.toString(),
         winnerId: winner.toString(),
         winnerName: winnerPlayer?.name || '',
         loserId: (winner === playerA ? playerB : playerA).toString(),
@@ -220,24 +326,90 @@ export async function addMatch(matchData) {
         winnerNewElo: winner === playerA ? ratingA_after : ratingB_after,
         loserOldElo: winner === playerA ? ratingB_before : ratingA_before,
         loserNewElo: winner === playerA ? ratingB_after : ratingA_after,
-        timestamp: Date.now(),
+        timestamp,
+        synced: false
       };
       
       await AsyncStorage.setItem(MATCHES_KEY, JSON.stringify([newMatch, ...matches]));
-      return true;
+      matchId = newMatch.id;
+      
+      // Note: Player ratings, RD, wins/losses are updated separately via updatePlayerRating()
+    } else {
+      // Native: Use SQLite
+      const db = await getDatabase();
+      if (!db) return false;
+      
+      const { playerA, playerB, winner, ratingA_before, ratingA_after, ratingB_before, ratingB_after } = matchData;
+      
+      const result = await db.runAsync(
+        `INSERT INTO matches (playerA, playerB, winner, date, ratingA_before, ratingA_after, ratingB_before, ratingB_after, synced, lastModified)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+        [playerA, playerB, winner, timestamp, ratingA_before, ratingA_after, ratingB_before, ratingB_after, timestamp]
+      );
+      
+      matchId = result.lastInsertRowId;
+      
+      // Note: Player ratings, RD, wins/losses are updated separately via updatePlayerRating()
     }
     
-    // Native: Use SQLite
-    const db = getDatabase();
-    if (!db) return false;
+    // Sync players to Firestore (their ratings changed)
+    if (syncManager && typeof syncManager.syncPlayerToFirestore === 'function') {
+      const { playerA, playerB, ratingA_after, ratingB_after } = matchData;
+      
+      try {
+        // Get updated player data
+        const players = await getPlayers();
+        const playerAData = players.find(p => p.id === playerA);
+        const playerBData = players.find(p => p.id === playerB);
+        
+        if (playerAData) {
+          await syncManager.syncPlayerToFirestore({
+            ...playerAData,
+            rating: ratingA_after,
+            matchesPlayed: (playerAData.matchesPlayed || 0) + 1
+          });
+        }
+        
+        if (playerBData) {
+          await syncManager.syncPlayerToFirestore({
+            ...playerBData,
+            rating: ratingB_after,
+            matchesPlayed: (playerBData.matchesPlayed || 0) + 1
+          });
+        }
+      } catch (error) {
+        console.log('Player updates will sync later:', error.message);
+      }
+    }
     
-    const { playerA, playerB, winner, ratingA_before, ratingA_after, ratingB_before, ratingB_after } = matchData;
-    
-    await db.runAsync(
-      `INSERT INTO matches (playerA, playerB, winner, date, ratingA_before, ratingA_after, ratingB_before, ratingB_after)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [playerA, playerB, winner, Date.now(), ratingA_before, ratingA_after, ratingB_before, ratingB_after]
-    );
+    // Sync to Firestore (optional - continues even if it fails)
+    if (syncManager && typeof syncManager.syncMatchToFirestore === 'function') {
+      try {
+        const firestoreId = await syncManager.syncMatchToFirestore({
+          ...matchData,
+          timestamp
+        });
+        
+        // Update local record with Firestore ID
+        if (firestoreId) {
+          if (Platform.OS === 'web') {
+            const matches = await getMatches();
+            const updated = matches.map(m => m.id === matchId ? { ...m, firestoreId, synced: true } : m);
+            await AsyncStorage.setItem(MATCHES_KEY, JSON.stringify(updated));
+          } else {
+            const db = await getDatabase();
+            if (db) {
+              await db.runAsync(
+                'UPDATE matches SET firestoreId = ?, synced = 1 WHERE id = ?',
+                [firestoreId, matchId]
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.log('Match saved locally, will sync to Firestore later:', error.message);
+      }
+    }
     
     return true;
   } catch (error) {
@@ -259,7 +431,7 @@ export async function clearAllData() {
     }
     
     // Native: Use SQLite
-    const db = getDatabase();
+    const db = await getDatabase();
     if (!db) return false;
     
     await db.execAsync(`
@@ -287,7 +459,7 @@ export async function getPlayerById(playerId) {
     }
     
     // Native: Use SQLite
-    const db = getDatabase();
+    const db = await getDatabase();
     if (!db) return null;
     
     const result = await db.getFirstAsync('SELECT * FROM players WHERE id = ?', [playerId]);
@@ -327,7 +499,7 @@ export async function getPlayerStats(playerId) {
     }
     
     // Native: Use SQLite
-    const db = getDatabase();
+    const db = await getDatabase();
     if (!db) return { wins: 0, losses: 0 };
     
     const wins = await db.getFirstAsync(

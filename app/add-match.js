@@ -1,127 +1,201 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, ScrollView } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
-import { usePlayers } from '../hooks/usePlayers';
-import { useMatches } from '../hooks/useMatches';
+import React, { useState, useEffect } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  FlatList 
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { useAuth } from '../contexts/AuthContext';
+import { getLeaderboard } from '../utils/userProfile';
+import { createMatchRequest } from '../utils/matchRequests';
+import { showAlert, showSimpleAlert, showConfirm } from '../utils/alerts';
 import Button from '../components/Button';
 import { COLORS } from '../constants/colors';
-import { calculateNewElo } from '../utils/elo';
+import { FONTS } from '../constants/fonts';
 
 export default function AddMatchScreen() {
-  const { players, updatePlayerElo } = usePlayers();
-  const { addMatch } = useMatches();
+  const { user } = useAuth();
+  const router = useRouter();
   
-  const [winner, setWinner] = useState('');
-  const [loser, setLoser] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [allPlayers, setAllPlayers] = useState([]);
+  const [filteredPlayers, setFilteredPlayers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
 
-  const handleAddMatch = () => {
-    if (!winner || !loser) {
-      Alert.alert('Error', 'Please select both winner and loser');
-      return;
+  // Load all players on mount
+  useEffect(() => {
+    if (user?.uid) {
+      loadPlayers();
     }
+  }, [user?.uid]);
 
-    if (winner === loser) {
-      Alert.alert('Error', 'Winner and loser must be different players');
-      return;
+  const loadPlayers = async () => {
+    if (!user?.uid) return;
+    
+    setIsLoading(true);
+    try {
+      // Get all players from leaderboard (up to 500)
+      const players = await getLeaderboard(500);
+      // Filter out current user
+      const otherPlayers = players.filter(p => p.uid !== user.uid);
+      setAllPlayers(otherPlayers);
+      setFilteredPlayers(allPlayers);
+    } catch (error) {
+      console.error('Error loading players:', error);
+      showSimpleAlert('Error', 'Failed to load players');
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    const winnerPlayer = players.find(p => p.id === winner);
-    const loserPlayer = players.find(p => p.id === loser);
-
-    if (!winnerPlayer || !loserPlayer) {
-      Alert.alert('Error', 'Selected players not found');
-      return;
+  // Filter players based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredPlayers(allPlayers);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = allPlayers.filter(player => 
+        player.displayName.toLowerCase().includes(query) ||
+        player.email.toLowerCase().includes(query)
+      );
+      setFilteredPlayers(filtered);
     }
+  }, [searchQuery, allPlayers]);
 
-    // Calculate new ELO ratings
-    const { winnerNewElo, loserNewElo } = calculateNewElo(
-      winnerPlayer.elo,
-      loserPlayer.elo
-    );
-
-    // Update player ELOs
-    updatePlayerElo(winner, winnerNewElo);
-    updatePlayerElo(loser, loserNewElo);
-
-    // Add match to history with database schema
-    addMatch({
-      playerA: winner,
-      playerB: loser,
-      winner: winner,
-      ratingA_before: winnerPlayer.elo,
-      ratingA_after: winnerNewElo,
-      ratingB_before: loserPlayer.elo,
-      ratingB_after: loserNewElo,
-    });
-
-    // Reset form
-    setWinner('');
-    setLoser('');
-
-    Alert.alert(
-      'Match Recorded!',
-      `${winnerPlayer.name} defeated ${loserPlayer.name}\n\n` +
-      `${winnerPlayer.name}: ${winnerPlayer.elo} → ${winnerNewElo}\n` +
-      `${loserPlayer.name}: ${loserPlayer.elo} → ${loserNewElo}`
+  const handleSendRequest = async (opponent) => {
+    showConfirm(
+      'Confirm Match Request',
+      `Send match request to ${opponent.displayName}?\n\nYou are claiming you WON against them.\nThey must confirm the loss.`,
+      async () => {
+        setIsSending(true);
+        try {
+          // Get current user's display name from local profile or auth
+          const currentUserName = user.displayName || user.email;
+          
+          await createMatchRequest(
+            user.uid,
+            opponent.uid,
+            currentUserName,
+            opponent.displayName
+          );
+          
+          showSimpleAlert(
+            'Request Sent!',
+            `Match request sent to ${opponent.displayName}. They will need to confirm the loss for the match to be recorded.`,
+            () => {
+              setSearchQuery('');
+              router.push('/');
+            }
+          );
+        } catch (error) {
+          console.error('Error sending match request:', error);
+          showSimpleAlert('Error', 'Failed to send match request');
+        } finally {
+          setIsSending(false);
+        }
+      },
+      undefined,
+      'Send Request',
+      'Cancel'
     );
   };
 
-  return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Add Match Result</Text>
-
-      {players.length < 2 ? (
-        <Text style={styles.emptyText}>
-          You need at least 2 players to record a match. Please add players first.
+  const renderPlayer = ({ item: opponent }) => (
+    <View style={styles.playerCard}>
+      <View style={styles.playerInfo}>
+        <Text style={styles.playerName}>{opponent.displayName}</Text>
+        <Text style={styles.playerEmail}>{opponent.email}</Text>
+        <Text style={styles.playerRating}>Rating: {Math.round(opponent.rating)}</Text>
+        <Text style={styles.playerStats}>
+          {opponent.matchesPlayed || 0} matches • {opponent.wins || 0}W - {opponent.losses || 0}L
         </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.sendButton, isSending && styles.sendButtonDisabled]}
+        onPress={() => handleSendRequest(opponent)}
+        disabled={isSending}
+      >
+        <Text style={styles.sendButtonText}>
+          {isSending ? 'Sending...' : 'I Won'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // Guard against null user
+  if (!user) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Please sign in to challenge players</Text>
+      </View>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading players...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Challenge Player</Text>
+        <Text style={styles.subtitle}>
+          Select your opponent and claim your victory
+        </Text>
+      </View>
+
+      <View style={styles.searchSection}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by name or email..."
+          placeholderTextColor={COLORS.textSecondary}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+
+      {filteredPlayers.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>
+            {searchQuery ? 'No players found' : 'No other players registered yet'}
+          </Text>
+          <Text style={styles.emptySubtext}>
+            {searchQuery ? 'Try a different search term' : 'Invite friends to join!'}
+          </Text>
+        </View>
       ) : (
-        <>
-          <View style={styles.section}>
-            <Text style={styles.label}>Winner</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={winner}
-                onValueChange={setWinner}
-                style={styles.picker}
-              >
-                <Picker.Item label="Select Winner" value="" />
-                {players.map(player => (
-                  <Picker.Item
-                    key={player.id}
-                    label={`${player.name} (${player.elo})`}
-                    value={player.id}
-                  />
-                ))}
-              </Picker>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.label}>Loser</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={loser}
-                onValueChange={setLoser}
-                style={styles.picker}
-              >
-                <Picker.Item label="Select Loser" value="" />
-                {players.map(player => (
-                  <Picker.Item
-                    key={player.id}
-                    label={`${player.name} (${player.elo})`}
-                    value={player.id}
-                  />
-                ))}
-              </Picker>
-            </View>
-          </View>
-
-          <View style={styles.buttonContainer}>
-            <Button title="Record Match" onPress={handleAddMatch} />
-          </View>
-        </>
+        <FlatList
+          data={filteredPlayers}
+          renderItem={renderPlayer}
+          keyExtractor={(item) => item.uid}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        />
       )}
-    </ScrollView>
+
+      <View style={styles.infoSection}>
+        <Text style={styles.infoTitle}>How it works:</Text>
+        <Text style={styles.infoText}>
+          1. Find your opponent in the list{'\n'}
+          2. Click "I Won" to send them a match request{'\n'}
+          3. They must confirm the loss{'\n'}
+          4. Once confirmed, both ratings will be updated
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -129,44 +203,135 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  header: {
+    paddingHorizontal: 16,
     paddingTop: 20,
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.text,
+    ...FONTS.title,
     textAlign: 'center',
-    marginBottom: 30,
-  },
-  section: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.text,
     marginBottom: 8,
   },
-  pickerContainer: {
+  subtitle: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+  searchSection: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  searchInput: {
     backgroundColor: COLORS.surface,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
-    overflow: 'hidden',
-  },
-  picker: {
+    padding: 12,
+    fontSize: 16,
     color: COLORS.text,
   },
-  buttonContainer: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    marginTop: 12,
+  },
+  listContent: {
     paddingHorizontal: 16,
-    marginTop: 20,
+  },
+  separator: {
+    height: 12,
+  },
+  playerCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  playerInfo: {
+    flex: 1,
+  },
+  playerName: {
+    ...FONTS.subheading,
+    marginBottom: 4,
+  },
+  playerEmail: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  playerRating: {
+    ...FONTS.body,
+    color: COLORS.primary,
+    fontWeight: 'bold',
+    marginBottom: 2,
+  },
+  playerStats: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    fontSize: 12,
+  },
+  sendButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+  },
+  sendButtonText: {
+    ...FONTS.body,
+    color: COLORS.background,
+    fontWeight: 'bold',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
   },
   emptyText: {
-    fontSize: 16,
+    ...FONTS.subheading,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    ...FONTS.body,
     color: COLORS.textSecondary,
     textAlign: 'center',
-    marginTop: 40,
-    paddingHorizontal: 40,
+  },
+  infoSection: {
+    paddingHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 20,
+    padding: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    marginHorizontal: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  infoTitle: {
+    ...FONTS.subheading,
+    marginBottom: 8,
+  },
+  infoText: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    lineHeight: 22,
   },
 });
