@@ -20,16 +20,42 @@ export default function MatchItem({ match }) {
   };
 
   const eloChange = match.winnerNewElo - match.winnerOldElo;
+  const isBulk = match.isBulk && (match.winsA || match.winsB);
+  const totalGames = isBulk ? match.winsA + match.winsB : 1;
+  const winnerWins = isBulk ? (match.winnerName === match.userName ? match.winsA : match.winsB) : 1;
+  const loserWins = isBulk ? (match.loserName === match.userName ? match.winsA : match.winsB) : 0;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.date}>{formatDate(match.timestamp)}</Text>
+        {isBulk && (
+          <View style={styles.bulkBadge}>
+            <Text style={styles.bulkBadgeText}>
+              📊 Session: {totalGames} games
+            </Text>
+          </View>
+        )}
       </View>
+
+      {isBulk && (
+        <View style={styles.bulkScoreSummary}>
+          <Text style={styles.bulkScoreText}>
+            Final Score: {winnerWins} - {loserWins}
+          </Text>
+        </View>
+      )}
       
       <View style={styles.matchInfo}>
         <View style={styles.playerSection}>
-          <Text style={styles.winnerName}>{match.winnerName} 🏆</Text>
+          <View style={styles.playerRow}>
+            <Text style={styles.winnerName}>{match.winnerName} 🏆</Text>
+            {isBulk && (
+              <Text style={styles.scoreText}>
+                {winnerWins}W
+              </Text>
+            )}
+          </View>
           <View style={styles.eloChange}>
             <Text style={styles.oldElo}>{match.winnerOldElo}</Text>
             <Text style={styles.arrow}>→</Text>
@@ -41,7 +67,14 @@ export default function MatchItem({ match }) {
         <Text style={styles.vs}>vs</Text>
 
         <View style={styles.playerSection}>
-          <Text style={styles.loserName}>{match.loserName}</Text>
+          <View style={styles.playerRow}>
+            <Text style={styles.loserName}>{match.loserName}</Text>
+            {isBulk && (
+              <Text style={styles.scoreText}>
+                {loserWins}W
+              </Text>
+            )}
+          </View>
           <View style={styles.eloChange}>
             <Text style={styles.oldElo}>{match.loserOldElo}</Text>
             <Text style={styles.arrow}>→</Text>
@@ -69,12 +102,39 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   header: {
-    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   date: {
     fontSize: 12,
     color: COLORS.textSecondary,
     fontWeight: '500',
+  },
+  bulkBadge: {
+    backgroundColor: COLORS.primary + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  bulkBadgeText: {
+    fontSize: 11,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  bulkScoreSummary: {
+    backgroundColor: COLORS.primary + '10',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  bulkScoreText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: 'bold',
   },
   matchInfo: {
     flexDirection: 'column',
@@ -83,6 +143,11 @@ const styles = StyleSheet.create({
   playerSection: {
     flexDirection: 'column',
     gap: 6,
+  },
+  playerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   winnerName: {
     fontSize: 16,
@@ -93,6 +158,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '400',
     color: COLORS.textSecondary,
+  },
+  scoreText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
   vs: {
     fontSize: 12,

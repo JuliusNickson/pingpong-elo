@@ -81,3 +81,53 @@ export function getWinProbability(playerElo, opponentElo) {
   const expected = getExpectedScore(playerElo, opponentElo);
   return Math.round(expected * 100);
 }
+
+/**
+ * Calculate ELO change for a single match outcome
+ * @param {number} playerRating - Player's current rating
+ * @param {number} opponentRating - Opponent's current rating
+ * @param {number} score - Match result (1 = win, 0 = loss)
+ * @param {number} K - K-factor (default 32)
+ * @returns {number} New rating after this match
+ */
+function calculateElo(playerRating, opponentRating, score, K = 32) {
+  const expected = 1 / (1 + Math.pow(10, (opponentRating - playerRating) / 400));
+  return playerRating + K * (score - expected);
+}
+
+/**
+ * Process multiple matches between two players sequentially
+ * Simulates each game one by one, updating ratings after each
+ * @param {object} playerA - Player A object with rating
+ * @param {object} playerB - Player B object with rating
+ * @param {number} winsA - Number of wins for Player A
+ * @param {number} winsB - Number of wins for Player B
+ * @returns {object} Final ratings for both players
+ */
+export function processBulkMatchResults(playerA, playerB, winsA, winsB) {
+  let ratingA = playerA.rating;
+  let ratingB = playerB.rating;
+
+  // Simulate wins for A
+  for (let i = 0; i < winsA; i++) {
+    const newRatingA = calculateElo(ratingA, ratingB, 1);
+    const newRatingB = calculateElo(ratingB, ratingA, 0);
+    ratingA = newRatingA;
+    ratingB = newRatingB;
+  }
+
+  // Simulate wins for B
+  for (let i = 0; i < winsB; i++) {
+    const newRatingA = calculateElo(ratingA, ratingB, 0);
+    const newRatingB = calculateElo(ratingB, ratingA, 1);
+    ratingA = newRatingA;
+    ratingB = newRatingB;
+  }
+
+  return {
+    newA: Math.round(ratingA),
+    newB: Math.round(ratingB),
+    changeA: Math.round(ratingA - playerA.rating),
+    changeB: Math.round(ratingB - playerB.rating),
+  };
+}

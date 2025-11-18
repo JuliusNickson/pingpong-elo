@@ -47,6 +47,42 @@ export async function createMatchRequest(senderUid, opponentUid, senderName, opp
 }
 
 /**
+ * Create a bulk match request (multiple games)
+ * @param {string} senderUid - UID of user sending request
+ * @param {string} opponentUid - UID of opponent
+ * @param {string} senderName - Display name of sender
+ * @param {string} opponentName - Display name of opponent
+ * @param {number} senderWins - Number of wins for sender
+ * @param {number} opponentWins - Number of wins for opponent
+ */
+export async function createBulkMatchRequest(senderUid, opponentUid, senderName, opponentName, senderWins, opponentWins) {
+  try {
+    const db = getFirestoreDb();
+    const requestRef = doc(collection(db, 'matchRequests'));
+    const requestData = {
+      id: requestRef.id,
+      senderUid,
+      opponentUid,
+      senderName,
+      opponentName,
+      senderWins,
+      opponentWins,
+      isBulk: true,
+      status: 'pending', // pending, accepted, declined
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+
+    await setDoc(requestRef, requestData);
+    console.log('Bulk match request created:', requestRef.id);
+    return requestRef.id;
+  } catch (error) {
+    console.error('Error creating bulk match request:', error);
+    throw error;
+  }
+}
+
+/**
  * Get all match requests for a user (both sent and received)
  * @param {string} userUid - UID of the user
  */
@@ -228,6 +264,109 @@ export async function acceptMatchRequest(requestId, opponentUid) {
     };
   } catch (error) {
     console.error('Error accepting match request:', error);
+    throw error;
+  }
+}
+
+/**
+ * Accept a bulk match request (multiple games)
+ * @param {string} requestId - ID of the match request
+ * @param {string} opponentUid - UID of the user accepting (must be the opponent)
+ */
+export async function acceptBulkMatchRequest(requestId, opponentUid) {
+  try {
+    const db = getFirestoreDb();
+    const requestRef = doc(db, 'matchRequests', requestId);
+    const requestSnap = await getDoc(requestRef);
+    
+    if (!requestSnap.exists()) {
+      throw new Error('Match request not found');
+    }
+
+    const request = requestSnap.data();
+    
+    // Verify the user accepting is the opponent
+    if (request.opponentUid !== opponentUid) {
+      throw new Error('Only the opponent can accept this request');
+    }
+
+    if (request.status !== 'pending') {
+      throw new Error('This request has already been processed');
+    }
+
+    if (!request.isBulk) {
+      throw new Error('This is not a bulk match request');
+    }
+
+    // Get both players' profiles
+    const [senderProfile, opponentProfile] = await Promise.all([
+      getUserProfile(request.senderUid),
+      getUserProfile(request.opponentUid)
+    ]);
+
+    if (!senderProfile || !opponentProfile) {
+      throw new Error('Player profiles not found');
+    }
+
+    // Import processBulkMatchResults dynamically to avoid circular dependency
+    const { processBulkMatchResults } = await import('./elo');
+
+    // Calculate new ratings using bulk processing
+    const { newA, newB } = processBulkMatchResults(
+      { rating: senderProfile.rating },
+      { rating: opponentProfile.rating },
+      request.senderWins,
+      request.opponentWins
+    );
+
+    const totalMatches = request.senderWins + request.opponentWins;
+
+    // Update both players' profiles
+    await Promise.all([
+      updateUserProfile(request.senderUid, {
+        rating: newA,
+        matchesPlayed: (senderProfile.matchesPlayed || 0) + totalMatches,
+        wins: (senderProfile.wins || 0) + request.senderWins,
+        losses: (senderProfile.losses || 0) + request.opponentWins,
+        lastPlayed: serverTimestamp()
+      }),
+      updateUserProfile(request.opponentUid, {
+        rating: newB,
+        matchesPlayed: (opponentProfile.matchesPlayed || 0) + totalMatches,
+        wins: (opponentProfile.wins || 0) + request.opponentWins,
+        losses: (opponentProfile.losses || 0) + request.senderWins,
+        lastPlayed: serverTimestamp()
+      }),
+      updateDoc(requestRef, {
+        status: 'accepted',
+        updatedAt: serverTimestamp()
+      })
+    ]);
+
+    // Record the bulk match
+    await saveMatch({
+      userUid: request.senderUid,
+      opponentUid: request.opponentUid,
+      winnerUid: request.senderWins > request.opponentWins ? request.senderUid : request.opponentUid,
+      userName: request.senderName,
+      opponentName: request.opponentName,
+      userRatingBefore: senderProfile.rating,
+      userRatingAfter: newA,
+      opponentRatingBefore: opponentProfile.rating,
+      opponentRatingAfter: newB,
+      winsA: request.senderWins,
+      winsB: request.opponentWins,
+      isBulk: true,
+      requestId: requestId
+    });
+
+    console.log('Bulk match request accepted and matches recorded');
+    return {
+      senderNewRating: newA,
+      opponentNewRating: newB
+    };
+  } catch (error) {
+    console.error('Error accepting bulk match request:', error);
     throw error;
   }
 }

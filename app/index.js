@@ -134,6 +134,15 @@ export default function HomeScreen() {
         
         <Pressable 
           style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
+          onPress={() => router.push('/bulk-match')}
+        >
+          <Text style={styles.navButtonIcon}>📊</Text>
+          <Text style={styles.navButtonText}>Record Session</Text>
+          <Text style={styles.navButtonSubtext}>Multiple matches at once</Text>
+        </Pressable>
+        
+        <Pressable 
+          style={({ pressed }) => [styles.navButton, pressed && styles.pressed]}
           onPress={() => router.push('/requests')}
         >
           <Text style={styles.navButtonIcon}>📬</Text>

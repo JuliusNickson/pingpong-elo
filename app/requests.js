@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   getMatchRequests,
   acceptMatchRequest,
+  acceptBulkMatchRequest,
   declineMatchRequest,
   cancelMatchRequest,
 } from '../utils/matchRequests';
@@ -53,16 +54,29 @@ export default function RequestsScreen() {
   };
 
   const handleAccept = async (request) => {
+    const isBulk = request.isBulk;
+    const totalGames = isBulk ? request.senderWins + request.opponentWins : 1;
+    const matchSummary = isBulk 
+      ? `\n\nMatch Summary:\n${request.senderName}: ${request.senderWins} wins\nYou: ${request.opponentWins} wins\nTotal: ${totalGames} games`
+      : '';
+
     showConfirm(
-      'Confirm Loss',
-      `Confirm that you lost to ${request.senderName}?\n\nThis will update both players' ratings.`,
+      'Confirm Match Results',
+      `Confirm these match results from ${request.senderName}?${matchSummary}\n\nThis will update both players' ratings.`,
       async () => {
         setProcessingId(request.id);
         try {
-          const result = await acceptMatchRequest(request.id, user.uid);
+          const result = isBulk
+            ? await acceptBulkMatchRequest(request.id, user.uid)
+            : await acceptMatchRequest(request.id, user.uid);
+          
+          const newRating = isBulk 
+            ? Math.round(result.opponentNewRating)
+            : Math.round(result.loserNewRating);
+
           showSimpleAlert(
             'Match Recorded!',
-            `The match has been recorded.\n\nYour new rating: ${Math.round(result.loserNewRating)}`,
+            `${isBulk ? `${totalGames} matches` : 'The match'} recorded successfully.\n\nYour new rating: ${newRating}`,
             loadRequests
           );
         } catch (error) {
@@ -73,7 +87,7 @@ export default function RequestsScreen() {
         }
       },
       undefined,
-      'Confirm Loss',
+      'Confirm',
       'Cancel',
       'destructive'
     );
@@ -144,19 +158,29 @@ export default function RequestsScreen() {
   const renderRequest = (request, type) => {
     const isPending = request.status === 'pending';
     const isProcessing = processingId === request.id;
+    const isBulk = request.isBulk;
+    const totalGames = isBulk ? request.senderWins + request.opponentWins : 1;
 
     return (
       <View key={request.id} style={styles.requestCard}>
         <View style={styles.requestHeader}>
           <Text style={styles.requestTitle}>
             {type === 'received'
-              ? `${request.senderName} claims they won`
+              ? `${request.senderName} ${isBulk ? 'reports match session' : 'claims they won'}`
               : `You challenged ${request.opponentName}`}
           </Text>
           <View style={[styles.statusBadge, styles[`status${request.status}`]]}>
             <Text style={styles.statusText}>{request.status}</Text>
           </View>
         </View>
+
+        {isBulk && (
+          <View style={styles.bulkInfo}>
+            <Text style={styles.bulkInfoText}>
+              📊 {totalGames} games: {request.senderName} {request.senderWins}W - {request.opponentWins}W {request.opponentName}
+            </Text>
+          </View>
+        )}
 
         <Text style={styles.requestTime}>{formatDate(request.createdAt)}</Text>
 
@@ -168,7 +192,7 @@ export default function RequestsScreen() {
               disabled={isProcessing}
             >
               <Text style={styles.actionButtonText}>
-                {isProcessing ? 'Processing...' : 'Confirm Loss'}
+                {isProcessing ? 'Processing...' : 'Confirm'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -324,6 +348,18 @@ const styles = StyleSheet.create({
     ...FONTS.subheading,
     flex: 1,
     marginRight: 8,
+  },
+  bulkInfo: {
+    backgroundColor: COLORS.primary + '10',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  bulkInfoText: {
+    ...FONTS.body,
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: '600',
   },
   requestTime: {
     ...FONTS.body,

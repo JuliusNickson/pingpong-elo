@@ -30,6 +30,10 @@ export async function saveMatch(matchData) {
       opponentRatingBefore: matchData.opponentRatingBefore,
       opponentRatingAfter: matchData.opponentRatingAfter,
       requestId: matchData.requestId || null,
+      // Bulk match fields
+      winsA: matchData.winsA || null,
+      winsB: matchData.winsB || null,
+      isBulk: matchData.isBulk || false,
       createdAt: serverTimestamp(),
     };
 

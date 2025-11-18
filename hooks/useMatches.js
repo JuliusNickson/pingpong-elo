@@ -68,6 +68,12 @@ export function useMatches() {
           loserOldElo: isUserWinner ? theirRatingBefore : myRatingBefore,
           loserNewElo: isUserWinner ? theirRatingAfter : myRatingAfter,
           timestamp: match.createdAt?.toMillis() || Date.now(),
+          // Bulk match fields
+          isBulk: match.isBulk || false,
+          winsA: match.winsA || null,
+          winsB: match.winsB || null,
+          userName: match.userName || null,
+          opponentName: match.opponentName || null,
         };
       });
       
